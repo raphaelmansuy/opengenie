@@ -4,7 +4,7 @@ import type { Approval, SessionView } from "../domain/events";
 import { api, type CatalogueResponse } from "../api/client";
 import { useReturnFocus } from "../hooks/useReturnFocus";
 import { ModelPicker } from "./ModelPicker";
-import { FolderPicker } from "./FolderPicker";
+import { FolderTrigger } from "./FolderPicker";
 import { LogoMark } from "./Logo";
 import { ModelFacts } from "./ModelFacts";
 import { BudgetMeter } from "./Budget";
@@ -200,7 +200,7 @@ export const USER_SCRATCH = "/Users/me/agent_scratch";
 export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddKey, onStart, demo, notice,
   user, recent, onOpenRecent, onOpenSearch, onOpenCatalog, onAskAssistant, onNewSql, onOpenQueries }: {
   catalogue: CatalogueResponse | null;
-  folder: string; onFolder: (v: string) => void;
+  folder: string; onFolder: () => void;
   model: string; onModel: (v: string) => void;
   onAddKey?: () => void;
   demo: boolean;
@@ -240,10 +240,10 @@ export function EmptyState({ catalogue, folder, onFolder, model, onModel, onAddK
         <section className="home-fence" aria-label="Working folder">
           <div className="home-fence-main">
             <span className="home-fence-label" id="home-fence-label">Working folder</span>
-            <FolderPicker value={folder} onChange={onFolder} />
+            <FolderTrigger value={folder} onOpen={onFolder} />
           </div>
           <p className="home-fence-note">
-            Everything under it, nothing outside it. A write anywhere else asks you first.
+            The agent’s workspace file writes are scoped to this folder and its subfolders.
           </p>
         </section>
 

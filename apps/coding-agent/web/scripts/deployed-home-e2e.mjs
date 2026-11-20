@@ -28,13 +28,10 @@ for (const w of [1440, 800]) {
     await p.waitForFunction(() => [...document.querySelectorAll(".fp-pop .fp-row")].length > 2, null, { timeout: 30000 }).catch(() => {});
     check("the picker lists real workspace folders", (await p.locator(".fp-pop .fp-row").count()) > 2);
     await p.screenshot({ path: `${out}/deployed-${w}-picker.png` });
-    // Walk the tree: the current folder's ancestor is expanded, so its siblings are visible.
-    const rows = await p.locator(".fp-pop .fp-row").count();
-    await p.locator(".fp-pop .fp-twisty").first().click();
-    await p.waitForTimeout(2500);
-    check("a folder expands in place", (await p.locator(".fp-pop .fp-row").count()) >= rows);
-    const names = await p.locator(".fp-pop .fp-row .fp-name").allInnerTexts();
-    check("real folder names are shown", names.some((n) => /agent_scratch|Shared|Repos|My home/.test(n)), names.join(" / ").slice(0, 80));
+    const home = p.locator(".fp-pop .fp-row").filter({hasText:"My home"});
+    await home.click();
+    await p.getByRole("button", {name:"Back to previous location"}).waitFor();
+    check("home opens for browsing", (await p.locator(".fp-location strong").innerText()).startsWith("/Users/"));
     await p.screenshot({ path: `${out}/deployed-${w}-tree.png` });
     await p.keyboard.press("Escape");
   }

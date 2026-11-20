@@ -25,6 +25,17 @@ export interface WsObject {
   path: string; name: string; kind: "notebook" | "file"; language: string; size: number;
   truncated: boolean; cells: Cell[]; text: string;
 }
+export interface WsNode {
+  path: string;
+  name: string;
+  kind: "directory" | "notebook" | "file" | "repo" | "library";
+  language?: string;
+  objectId?: string;
+  hasChildren: boolean;
+  error?: string;
+  children?: WsNode[];
+}
+
 export interface WsHit { path: string; name: string; kind: string; language?: string }
 export interface CatalogItem { kind: "catalog" | "schema" | "table"; name: string; ref: string; tableType?: string; comment?: string }
 export interface TableInfo {
@@ -335,6 +346,12 @@ export const api = {
    *  deployment from a stale one. */
   build: () => call<{ version: string; commit: string; docs: string; source: string;
     releases: string; agentMode?: string }>("/api/version"),
+  folderRoots: async (signal?: AbortSignal) =>
+    (await call<{ roots: WsHit[] }>("/api/workspace/roots", { signal })).roots,
+  folderChildren: async (path: string, signal?: AbortSignal) =>
+    (await call<{ node: WsNode }>(`/api/workspace?path=${encodeURIComponent(path)}&depth=1`, { signal })).node.children ?? [],
+  inspectFolder: (path: string, signal: AbortSignal) =>
+    call<{ path: string; exists: boolean }>(`/api/workspace/folder-selection?path=${encodeURIComponent(path)}`, { signal }),
   object: (path: string) => call<WsObject>(`/api/workspace/object?path=${encodeURIComponent(path)}`),
   /** The version token only: one `get-status`, no content. Comparable with `WsObject.version`. */
   version: (path: string) => call<{ path: string; version: string; modifiedAt: number }>(`/api/workspace/version?path=${encodeURIComponent(path)}`),

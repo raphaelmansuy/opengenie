@@ -14,9 +14,10 @@ import { initials } from "../domain/sessions";
 import { DOCS_URL, RELEASES_URL, SOURCE_URL, versionLabel, versionTitle, type BuildFacts } from "../domain/version";
 import { CopyButton } from "./CopyButton";
 
-export function AccountMenu({ user, host, folder, demo, onProviders, onKeys, build }: {
+export function AccountMenu({ user, host, folder, demo, onProviders, onKeys, onFolder, build }: {
   user: string; host: string | null; folder: string; demo: boolean;
   onProviders: () => void; onKeys: () => void;
+  onFolder?: () => void;
   /** Which build this page is, so the menu can state it. */
   build?: BuildFacts;
 }) {
@@ -74,6 +75,7 @@ export function AccountMenu({ user, host, folder, demo, onProviders, onKeys, bui
               </>
             )}
           </dl>
+          {onFolder && <button role="menuitem" className="account-item" onClick={() => { trigger.current?.focus(); act(onFolder)(); }}>Change working folder</button>}
           <button role="menuitem" className="account-item" onClick={act(onProviders)}>Providers and keys</button>
           <button role="menuitem" className="account-item" onClick={act(onKeys)}>Keyboard shortcuts</button>
           {/* The same two links the version row points at, named explicitly: a menu is where someone
