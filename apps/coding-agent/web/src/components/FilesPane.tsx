@@ -29,16 +29,6 @@ export interface FilesPaneProps {
   onUseFolder: (path: string) => void;
 }
 
-async function fetchDir(path: string): Promise<WsNode[]> {
-  const r = await fetch(`/api/workspace?path=${encodeURIComponent(path)}&depth=1`);
-  if (!r.ok) {
-    let detail = r.statusText;
-    try { detail = (await r.json()).detail ?? detail; } catch { /* non-JSON */ }
-    throw new Error(detail);
-  }
-  return ((await r.json()).node?.children ?? []) as WsNode[];
-}
-
 export function FilesPane({ selected, revision = 0, onOpenFile, onAttach, onUseFolder }: FilesPaneProps) {
   const [view, setView] = useState<FilesView>(() => {
     try { return readView(localStorage.getItem(VIEW_KEY)); } catch { return "tree"; }
@@ -65,10 +55,7 @@ export function FilesPane({ selected, revision = 0, onOpenFile, onAttach, onUseF
   // The roots are the ones the tree already computes: home, Shared, Repos. One request, once.
   useEffect(() => {
     let live = true;
-    fetch("/api/workspace/roots").then(async (r) => {
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(d.detail ?? `the server answered ${r.status}`);
-      const roots = d.roots ?? [];
+    api.folderRoots().then(roots => {
       const first = roots[0];
       if (!live) return;
       if (!first) { setError("this workspace has no folders your account can see"); return; }
@@ -84,7 +71,7 @@ export function FilesPane({ selected, revision = 0, onOpenFile, onAttach, onUseF
     if (!path) return;
     setBusy(true);
     try {
-      setNodes(sortNodes(await fetchDir(path)));
+      setNodes(sortNodes(await api.folderChildren(path)));
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "cannot read this folder");
@@ -235,6 +222,7 @@ export function FilesPane({ selected, revision = 0, onOpenFile, onAttach, onUseF
           onPick={(id) => {
             const node = menu.node;
             setMenu(null);
+            if (id === "use-folder") onUseFolder(node.path);
             if (id === "favorite") {
               const next = toggleFavorite(favorites, { path: node.path, name: node.name, kind: node.kind });
               setFavorites(next);

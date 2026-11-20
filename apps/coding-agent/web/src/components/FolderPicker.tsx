@@ -1,339 +1,162 @@
-/** The working-folder picker: a real tree, not a text box.
- *
- * The first-run screen used to ask for the write fence by typing an absolute path into an input. That
- * is the single most consequential field in the app — everything the agent may change lives under it —
- * and it was a free-text box with a placeholder: a typo meant a session that could write nowhere, and
- * nobody could see which folders were even available.
- *
- * So: the same lazily-loaded workspace tree the Files pane uses (one request per folder opened, folders
- * first, unreadable folders say so), inside a popover, with a search that walks by name. Choose a
- * folder and it becomes the fence. The path stays visible and editable as a fallback for a path the
- * tree cannot reach (another user's home, a path not yet created).
- *
- * Deliberate choices:
- *  - **the trigger reads as the answer**, not as an action: it shows the folder name and its path, so
- *    the fence is legible without opening anything;
- *  - **"Use this folder" is on the row**, so choosing is one click, not select-then-confirm;
- *  - **the current folder is marked**, so reopening the picker answers "where am I?" at a glance;
- *  - **Escape closes and returns focus**, and the popover never traps focus.
- */
-import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { api, type WsHit } from "../api/client";
-import { canonicalPath, parentOf } from "../domain/docs";
-import { ChevronRight, Folder, Refresh, Search } from "./Icons";
+import { useEffect, useRef, useState } from "react";
+import { api, ApiError } from "../api/client";
+import { canonicalPath } from "../domain/docs";
+import { isFolder } from "../domain/workspaceMenu";
+import { useResource } from "../hooks/useResource";
 import { useReturnFocus } from "../hooks/useReturnFocus";
+import { Check, ChevronLeft, ChevronRight, Folder, Lock, Refresh, Search } from "./Icons";
 
-interface Node {
-  path: string;
-  name: string;
-  kind: string;
-  hasChildren: boolean;
-  language?: string;
+export function FolderTrigger({ value, onOpen }: { value: string; onOpen: () => void }) {
+  return <button type="button" className="fp-trigger" aria-haspopup="dialog" onClick={onOpen}
+    aria-label={`Change working folder, ${value || "none selected"}`}>
+    <span className="fp-trigger-ico"><Folder size={18} /></span>
+    <span className="fp-trigger-text"><strong className="fp-trigger-name">{value.split("/").filter(Boolean).pop() || "Choose a folder"}</strong>
+      <span className="fp-trigger-path">{value}</span></span>
+    <span className="fp-change">Change <ChevronRight size={14} /></span>
+  </button>;
 }
 
-const POPOVER_WIDTH = 420;
-const POPOVER_MAX = 400;
-
-async function listFolder(path: string): Promise<Node[]> {
-  const r = await fetch(`/api/workspace?path=${encodeURIComponent(path)}&depth=1`);
-  if (!r.ok) {
-    let detail = r.statusText;
-    try { detail = (await r.json()).detail ?? detail; } catch { /* not JSON */ }
-    throw new Error(detail);
-  }
-  return ((await r.json()).node?.children ?? []) as Node[];
-}
-
-/** One folder row. Children load the first time it opens, then stay: the picker is short-lived, so a
- *  cache would outlive its usefulness and a stale tree is worse than a re-fetch. */
-function Branch({ node, depth, current, expanded, onToggle, onPick }: {
-  node: Node; depth: number; current: string;
-  expanded: Set<string>; onToggle: (path: string) => void; onPick: (path: string) => void;
+/** Remounted per location/query so old results can never be selected in a new listing. */
+function FolderList({ location, query, current, onOpen }: {
+  location: string; query: string; current: string; onOpen: (path: string) => void;
 }) {
-  const open = expanded.has(node.path);
-  const [kids, setKids] = useState<Node[] | null>(null);
-  const [err, setErr] = useState("");
-  const [loading, setLoading] = useState(false);
-  const mine = canonicalPath(node.path) === current;
-
-  useEffect(() => {
-    if (!open || kids || loading) return;
-    let live = true;
-    setLoading(true);
-    listFolder(node.path)
-      .then((k) => { if (live) { setKids(k.filter((c) => c.kind === "directory" || c.kind === "repo")); setErr(""); } })
-      .catch((e) => { if (live) setErr(e instanceof Error ? e.message : "cannot read this folder"); })
-      .finally(() => { if (live) setLoading(false); });
-    return () => { live = false; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, node.path]);
-
-  return (
-    <div role="none">
-      <div className={`fp-row${mine ? " is-current" : ""}`} style={{ paddingLeft: 8 + depth * 14 }}>
-        <button type="button" className="fp-twisty" aria-expanded={node.hasChildren ? open : undefined}
-          aria-label={open ? `Collapse ${node.name}` : `Expand ${node.name}`}
-          disabled={!node.hasChildren}
-          onClick={() => { onToggle(node.path); }}>
-          {node.hasChildren ? <ChevronRight size={12} className={open ? "is-open" : ""} /> : null}
-        </button>
-        <button type="button" className="fp-name" onClick={() => { onToggle(node.path); }} title={node.path}>
-          <Folder size={13} /> <span>{node.name}</span>
-        </button>
-        {mine
-          ? <span className="fp-badge">current</span>
-          : <button type="button" className="fp-use" onClick={() => onPick(node.path)}>Use</button>}
-      </div>
-      {open && (
-        <div role="group">
-          {loading && !kids && <p className="fp-note" style={{ paddingLeft: 30 + depth * 14 }}>loading…</p>}
-          {err && <p className="fp-note is-err" style={{ paddingLeft: 30 + depth * 14 }}>{err}</p>}
-          {kids?.length === 0 && !err && !loading && (
-            <p className="fp-note" style={{ paddingLeft: 30 + depth * 14 }}>no sub-folders</p>
-          )}
-          {kids?.map((k) => (
-            <Branch key={k.path} node={k} depth={depth + 1} current={current}
-              expanded={expanded} onToggle={onToggle} onPick={onPick} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  const listing = useResource("listing", async signal => {
+    if (query.length >= 2) {
+      await new Promise<void>(resolve => {
+        const timer = window.setTimeout(resolve, 280);
+        signal.addEventListener("abort", () => { window.clearTimeout(timer); resolve(); }, { once: true });
+      });
+      signal.throwIfAborted();
+      return api.search(query, location || "/", signal);
+    }
+    const results = location ? await api.folderChildren(location, signal) : await api.folderRoots(signal);
+    return { results, complete: true };
+  });
+  const folders = listing.data?.results.filter(item => isFolder(item.kind)) ?? [];
+  if (listing.state === "loading") return <p className="fp-note" role="status">Loading folders…</p>;
+  if (listing.state === "error") return <div className="fp-note" role="alert">{listing.error}
+    <button type="button" className="btn sm" onClick={listing.reload}>Retry listing</button></div>;
+  return <>
+    {folders.map(item => <button type="button" className="fp-row" key={item.path} onClick={() => onOpen(item.path)}>
+      <span className="fp-folder-icon"><Folder size={16} /></span>
+      <span className="fp-row-text"><strong>{item.name}</strong><small>{item.path}</small></span>
+      {canonicalPath(item.path) === current && <span className="fp-current"><Check size={12} /> Current</span>}
+      <ChevronRight size={14} />
+    </button>)}
+    {!folders.length && <p className="fp-note" role="status">{query.length >= 2 ? "No matching folders in these results." : "No subfolders here."}</p>}
+    {listing.data?.complete === false && <p className="fp-note" role="status">Partial results. Open a folder to narrow your search.</p>}
+  </>;
 }
 
-export function FolderPicker({ value, onChange, disabled }: {
-  value: string;
-  onChange: (path: string) => void;
-  disabled?: boolean;
+export function FolderPicker({ current, initialPath, switching, onClose, onChoose }: {
+  current: string; initialPath?: string; switching: boolean; onClose: () => void; onChoose: (path: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [roots, setRoots] = useState<Node[]>([]);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [query, setQuery] = useState("");
-  /** A free-text path, for somewhere the tree does not reach. Toggled, not always shown: a text box
-   *  beside a tree invites typing a path that the tree could have given in one click. */
+  const dialog = useRef<HTMLDialogElement>(null);
+  const locationLabel = useRef<HTMLElement>(null);
+  const pending = useRef<AbortController | null>(null);
+  const [trail, setTrail] = useState<string[]>(initialPath ? [initialPath] : []);
   const [typing, setTyping] = useState(false);
-  const [draft, setDraft] = useState(value);
-  const [hits, setHits] = useState<WsHit[] | null>(null);
-  const [searching, setSearching] = useState(false);
+  const [draft, setDraft] = useState(initialPath || current);
+  const [query, setQuery] = useState("");
+  const [revision, setRevision] = useState(0);
   const [error, setError] = useState("");
-  /** Bumped by Refresh: the roots (and every open branch, via a remount) are fetched again. */
-  const [manual, setManual] = useState(0);
-  /** The row of the current folder, scrolled to after the ancestors have loaded. */
-  const listRef = useRef<HTMLDivElement>(null);
+  const [rejected, setRejected] = useState(false);
+  const [future, setFuture] = useState("");
+  const [checking, setChecking] = useState(false);
+  const location = trail.at(-1) ?? "";
+  const candidate = typing ? draft : location;
+  const normalized = canonicalPath(candidate);
+  const tooLong = [...candidate].length > 512;
+  const changed = Boolean(normalized && normalized !== "/" && normalized !== canonicalPath(current));
+  useReturnFocus("mount", { fallback: () => document.querySelector(".fp-trigger, .avatar-btn") });
   useEffect(() => {
-    if (!open) return;
-    let tries = 0;
-    const find = () => {
-      const el = listRef.current?.querySelector<HTMLElement>(".fp-row.is-current");
-      if (el) { el.scrollIntoView({ block: "center" }); return; }
-      if (tries++ < 12) window.setTimeout(find, 150);
-    };
-    const id = window.setTimeout(find, 120);
-    return () => window.clearTimeout(id);
-  }, [open]);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const box = useRef<HTMLDivElement>(null);
-  const search = useRef<HTMLInputElement>(null);
-  const baseId = useId();
-
-  const current = canonicalPath(value);
-  const label = current.split("/").filter(Boolean).pop() ?? current;
-
-  useEffect(() => { setDraft(value); }, [value]);
-
-  // Open: fetch the roots, and start with the current folder's ancestors expanded so the answer is in
-  // place rather than somewhere to walk to.
-  useEffect(() => {
-    if (!open) return;
-    let live = true;
-    setError("");
-    fetch("/api/workspace/roots")
-      .then(async (r) => {
-        const d = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(d.detail ?? `the server answered ${r.status}`);
-        return (d.roots ?? []) as { path: string; name: string }[];
-      })
-      .then((rs) => {
-        if (!live) return;
-        setRoots(rs.map((r) => ({ ...r, kind: "directory", hasChildren: true })));
-        // Expand the current folder and every folder above it, so opening the picker ANSWERS
-        // "where am I?" instead of asking the user to walk to their own location. Only paths at or
-        // below a root are kept: a prefix the tree cannot show would expand nothing.
-        const parts = current.split("/").filter(Boolean);
-        const chain = new Set<string>();
-        for (let i = 1; i <= parts.length; i++) chain.add("/" + parts.slice(0, i).join("/"));
-        for (const c of [...chain]) {
-          if (!rs.some((r) => c === r.path || c.startsWith(r.path + "/"))) chain.delete(c);
-        }
-        setExpanded(chain);
-      })
-      .catch((e) => { if (live) setError(`cannot reach the workspace: ${e.message}`); });
-    return () => { live = false; };
-  }, [open, current, manual]);
-
-  // Focus the search on open: the first thing anyone does here is look for a folder.
-  useEffect(() => {
-    if (!open) return;
-    const id = window.setTimeout(() => search.current?.focus(), 30);
-    return () => window.clearTimeout(id);
-  }, [open]);
-
-  // KB-1: closing the tree puts focus back on the trigger. The hook does it, so a click-outside and an
-  // Escape behave the same and neither can forget.
-  useReturnFocus(open);
-
-  const close = useCallback((returnFocus = true) => {
-    setOpen(false);
-    setQuery("");
-    setHits(null);
-    setTyping(false);
-    if (returnFocus) trigger.current?.focus();
+    const node = dialog.current!;
+    node.showModal();
+    return () => { node.close(); pending.current?.abort(); };
   }, []);
-
-  // Escape from anywhere, and a click outside. The popover is portalled, so "inside" is two checks.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented) return;
-      e.preventDefault();
-      close();
-    };
-    const onDown = (e: MouseEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (!t) return;
-      if (t.closest(".folder-picker") || t.closest(".fp-pop")) return;
-      close(false);
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("mousedown", onDown);
-    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("mousedown", onDown); };
-  }, [open, close]);
-
-  // Search by name, the same bounded walk the Files pane uses. Debounced; a newer query wins.
-  useEffect(() => {
-    const q = query.trim();
-    if (q.length < 2) { setHits(null); setSearching(false); return; }
-    let live = true;
-    const id = window.setTimeout(async () => {
-      setSearching(true);
-      try {
-        const r = await api.search(q, roots[0]?.path);
-        if (live) setHits(r.results.filter((h) => h.kind === "directory" || h.kind === "repo"));
-      } catch (e) {
-        if (live) setError(e instanceof Error ? e.message : "search failed");
-      } finally { if (live) setSearching(false); }
-    }, 320);
-    return () => { live = false; window.clearTimeout(id); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query]);
-
-  const toggle = (path: string) => {
-    setExpanded((cur) => {
-      const next = new Set(cur);
-      if (next.has(path)) next.delete(path); else next.add(path);
-      return next;
-    });
-  };
-
-  const pick = (path: string) => {
-    onChange(canonicalPath(path));
-    close();
-  };
-
-  /** Placement, measured after mount so a popover near the bottom edge flips up instead of leaving
-   *  the viewport. Fixed positioning: it is portalled, so no ancestor can clip it. */
-  const [placement, setPlacement] = useState<{ top: number; left: number; width: number } | null>(null);
-  useEffect(() => {
-    if (!open) { setPlacement(null); return; }
-    const r = trigger.current?.getBoundingClientRect();
-    if (!r) return;
-    const width = Math.min(POPOVER_WIDTH, window.innerWidth - 24);
-    const below = window.innerHeight - r.bottom - 12;
-    const top = below > 260 ? r.bottom + 6 : Math.max(12, r.top - POPOVER_MAX - 6);
-    setPlacement({ top, left: Math.max(12, Math.min(r.left, window.innerWidth - width - 12)), width });
-  }, [open]);
-
-  return (
-    <div className="folder-picker">
-      <button ref={trigger} type="button" className="fp-trigger" disabled={disabled}
-        aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? `${baseId}-pop` : undefined}
-        onClick={() => (open ? close(false) : setOpen(true))}
-        title={value ? `The agent may write only in ${value}` : "Choose the folder the agent may write in"}>
-        <span className="fp-trigger-ico" aria-hidden><Folder size={14} /></span>
-        <span className="fp-trigger-text">
-          <span className="fp-trigger-name">{label || "Choose a working folder"}</span>
-          <span className="fp-trigger-path">{value || "the agent can write only there"}</span>
-        </span>
-        <ChevronRight size={13} className="fp-trigger-caret" />
-      </button>
-
-      {open && placement && createPortal(
-        <div className="fp-pop" id={`${baseId}-pop`} role="dialog" aria-modal="false"
-          aria-label="Choose the working folder" ref={box}
-          style={{ top: placement.top, left: placement.left, width: placement.width }}>
-          <div className="fp-head">
-            <Search size={13} />
-            <input ref={search} className="fp-search" value={query} placeholder="Find a folder…"
-              aria-label="Find a folder by name" spellCheck={false}
-              onChange={(e) => { setQuery(e.target.value); setError(""); }} />
-            <button type="button" className="icon-btn" title="Refresh the folder list" aria-label="Refresh"
-              onClick={() => { setExpanded(new Set()); setManual((n) => n + 1); }}>
-              <Refresh size={14} />
-            </button>
-          </div>
-
-          <p className="fp-hint">
-            The agent can write <strong>only here</strong>. Everything else asks you first.
-          </p>
-
-          {error && <p className="fp-note is-err">{error}</p>}
-
-          {query.trim().length >= 2 ? (
-            <div className="fp-list" role="list" aria-label="Folder matches">
-              {searching && <p className="fp-note"><span className="spin" aria-hidden /> searching the workspace by name…</p>}
-              {!searching && hits?.length === 0 && <p className="fp-note">No folder matches “{query.trim()}”.</p>}
-              {hits?.map((h) => (
-                <div key={h.path} className={`fp-row${canonicalPath(h.path) === current ? " is-current" : ""}`}>
-                  <span className="fp-twisty" />
-                  <button type="button" className="fp-name" onClick={() => pick(h.path)} title={h.path}>
-                    <Folder size={13} /> <span>{h.name}</span>
-                    <span className="fp-where">{parentOf(h.path)}</span>
-                  </button>
-                  <button type="button" className="fp-use" onClick={() => pick(h.path)}>Use</button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="fp-list" role="tree" aria-label="Workspace folders" ref={listRef}>
-              {roots.length === 0 && !error && <p className="fp-note">loading your workspace…</p>}
-              {roots.map((r) => (
-                <Branch key={`${r.path}:${manual}`} node={r} depth={0} current={current}
-                  expanded={expanded} onToggle={toggle} onPick={pick} />
-              ))}
-            </div>
-          )}
-
-          <div className="fp-foot">
-            {typing ? (
-              <form className="fp-type" onSubmit={(e) => { e.preventDefault(); if (draft.trim().startsWith("/")) pick(draft.trim()); }}>
-                <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)}
-                  placeholder="/Users/you/agent_scratch" aria-label="Working folder path" spellCheck={false} />
-                <button className="btn primary sm" type="submit" disabled={!draft.trim().startsWith("/")}>Use</button>
-                <button className="btn ghost sm" type="button" onClick={() => { setTyping(false); setDraft(value); }}>Cancel</button>
-              </form>
-            ) : (
-              <>
-                <span className="fp-foot-note">Everything under it, nothing outside it.</span>
-                {/* A fallback, not the primary path: reachable when the folder cannot be walked to. */}
-                <button type="button" className="btn ghost sm" onClick={() => setTyping(true)}>Type a path…</button>
-              </>
-            )}
-          </div>
-        </div>,
-        document.body,
-      )}
+  function resetCheck() {
+    setFuture("");
+    setError("");
+    setRejected(false);
+  }
+  function navigate(next: string[]) {
+    setTrail(next);
+    requestAnimationFrame(() => locationLabel.current?.focus());
+    setQuery("");
+    resetCheck();
+  }
+  async function choose() {
+    if (!changed || tooLong || rejected || pending.current) return;
+    const controller = new AbortController();
+    pending.current = controller;
+    setChecking(true);
+    setError("");
+    try {
+      const result = await api.inspectFolder(candidate, controller.signal);
+      if (controller.signal.aborted) return;
+      if (!result.exists && !(typing && future === result.path)) {
+        if (typing) setFuture(result.path);
+        else setError("This folder is no longer available. Choose another folder.");
+        return;
+      }
+      onChoose(result.path);
+    } catch (e) {
+      if (!controller.signal.aborted) {
+        setError(e instanceof Error ? e.message : "Could not check this folder.");
+        setRejected(e instanceof ApiError && [401, 403, 422].includes(e.status));
+      }
+    } finally {
+      pending.current = null;
+      if (!controller.signal.aborted) setChecking(false);
+    }
+  }
+  return <dialog className="fp-pop" ref={dialog} aria-labelledby="fp-title" aria-describedby="fp-description"
+    onCancel={e => { e.preventDefault(); onClose(); }} onKeyDown={e => {
+      e.stopPropagation();
+      if (e.key === "Escape") { e.preventDefault(); onClose(); }
+    }}>
+    <header className="fp-heading">
+      <span className="fp-symbol"><Folder size={23} /></span>
+      <div><h2 id="fp-title">Choose a working folder</h2>
+        <p id="fp-description">{switching ? "Your next message starts a new conversation here. Current work continues in its original folder." :
+          "Choose where the coding agent can write workspace files."}</p></div>
+    </header>
+    <div className="fp-body">
+      <div className="fp-tabs" role="group" aria-label="Selection method">
+        <button type="button" disabled={checking} aria-pressed={!typing} onClick={() => { setTyping(false); resetCheck(); }}>Browse folders</button>
+        <button type="button" disabled={checking} aria-pressed={typing} onClick={() => { if (typing) return; setTyping(true); setDraft(location || current); resetCheck(); }}>Enter a path</button>
+      </div>
+      {typing ? <label className="fp-field">Workspace path
+        <input key="path" autoFocus disabled={checking} value={draft} spellCheck={false} onKeyDown={e => {
+            if (e.key === "Enter" && !e.repeat && !e.nativeEvent.isComposing) { e.preventDefault(); void choose(); }
+          }}
+          placeholder="/Shared/project" aria-invalid={Boolean(error) || tooLong} aria-describedby={error || tooLong ? "fp-error" : undefined} onChange={e => { setDraft(e.target.value); resetCheck(); }} />
+      </label> : <>
+        <label className="fp-find"><Search size={16} /><input key="search" className="fp-search" disabled={checking}
+          aria-label="Find a folder by name" placeholder={location ? "Search in this folder…" : "Search workspace folders…"}
+          value={query} onChange={e => setQuery(e.target.value)} /></label>
+        <div className="fp-location">
+          {trail.length > 0 && <button type="button" className="icon-btn" disabled={checking} aria-label="Back to previous location"
+            onClick={() => navigate(trail.slice(0, -1))}><ChevronLeft size={16} /></button>}
+          <strong ref={locationLabel} tabIndex={-1}>{location || "Workspace locations"}</strong>
+          <button type="button" className="icon-btn" disabled={checking} aria-label="Refresh folder list" onClick={() => setRevision(n => n + 1)}><Refresh size={15} /></button>
+        </div>
+        {query.trim().length === 1 && <p className="fp-search-hint">Enter two characters to search.</p>}
+        <fieldset className="fp-list" disabled={checking} aria-label="Workspace folders">
+          <FolderList key={JSON.stringify([location, query.trim().length >= 2 ? query.trim() : "", revision])}
+            location={location} query={query.trim()} current={canonicalPath(current)} onOpen={path => navigate([...trail, path])} />
+        </fieldset>
+      </>}
+      {(error || tooLong) && <p id="fp-error" className="fp-feedback" role="alert">{error || "Use a path with 512 characters or fewer."}</p>}
+      {future && <p className="fp-feedback" role="status">This folder was not found. Use this path if you intend to write to a future folder.</p>}
+      {typing && candidate && !changed && <p className="fp-search-hint" role="status">
+        {normalized === canonicalPath(current) ? "This is the current working folder." : "Choose a folder below the workspace root."}</p>}
+      <div className="fp-scope"><Lock size={16} /><div><strong>{!typing && candidate ? "Selected folder" : "Current folder"}</strong>
+        <code>{(!typing && candidate) || current || "None selected"}</code></div>
+        {!candidate && current && !typing && <button type="button" className="btn ghost sm" onClick={() => navigate([canonicalPath(current)])}>Open</button>}</div>
     </div>
-  );
+    <footer className="fp-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button>
+      <button type="button" className="btn primary" disabled={!changed || checking || tooLong || rejected || (!typing && Boolean(query.trim()))} onClick={() => void choose()}>
+        {checking ? "Checking folder…" : future ? "Use future folder" : switching ? "Use for new conversation" : "Use this folder"}</button></footer>
+  </dialog>;
 }

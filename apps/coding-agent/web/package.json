@@ -54,6 +54,7 @@
     "e2e:agent-storage": "node scripts/agent-storage-e2e.mjs",
     "e2e:agent-live-table": "node scripts/agent-live-table-e2e.mjs",
     "e2e:agent-parity": "node scripts/agent-parity-e2e.mjs",
+    "e2e:folder": "npm run build && node scripts/folder-e2e.mjs",
     "e2e:notebook-markdown": "node scripts/notebook-markdown-e2e.mjs"
   },
   "dependencies": {

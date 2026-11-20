@@ -20,6 +20,7 @@ interface Props {
   conn: StreamState;
   dockVisible: boolean;
   error?: string | null;
+  onChooseFolder?: () => void;
   onOpen: (doc: Doc) => void;
   onConversation: () => void;
   onStop: () => Promise<void>;
@@ -81,7 +82,7 @@ export function artifactIcon(kind: DocKind) {
   }
 }
 
-export function MissionScreen({ session, conn, dockVisible, error, onOpen, onConversation, onStop, onRestore }: Props) {
+export function MissionScreen({ session, conn, dockVisible, error, onOpen, onChooseFolder, onConversation, onStop, onRestore }: Props) {
   // App keys this surface by session ID. A pin refers only to a turn in that session.
   const [selected, setSelected] = useState<string | null>(null);
   const [tab, setTab] = useState<"overview" | "activity" | WorkTab>("overview");
@@ -196,7 +197,7 @@ export function MissionScreen({ session, conn, dockVisible, error, onOpen, onCon
         </div>
         {WORK_TABS.includes(tab as WorkTab) && <div role="tabpanel" id={`${uid}-panel-${tab}`} aria-labelledby={`${uid}-tab-${tab}`} tabIndex={0}><WorkPanel tab={tab as WorkTab} /></div>}
         <footer className="mission-footer"><Folder size={13} /><span>Working folder <code>{session.scope?.folder || session.folder || "Not selected"}</code>
-          {session.execution?.persistence !== "durable" && <small>History lasts until this server restarts.</small>}</span></footer>
+          {session.execution?.persistence !== "durable" && <small>History lasts until this server restarts.</small>}</span>{onChooseFolder && <button className="btn sm" onClick={onChooseFolder}>Change folder</button>}</footer>
       </div>
     </div>
   </div>;

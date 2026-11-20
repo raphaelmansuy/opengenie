@@ -10,7 +10,7 @@
  */
 import { PaneError } from "./PaneError";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { api, type WsHit } from "../api/client";
+import { api, type WsHit, type WsNode } from "../api/client";
 import type { Attachment } from "../domain/events";
 import { workspaceUrl, type LinkKind } from "../domain/links";
 import {
@@ -24,28 +24,7 @@ import { ActionDialog, WorkspaceMenu, type PromptState } from "./WorkspaceMenu";
 
 const FAV_KEY = "coding-agent.workspace-favorites";
 
-export interface WsNode {
-  path: string;
-  name: string;
-  kind: "directory" | "notebook" | "file" | "repo" | "library";
-  language?: string;
-  objectId?: string;
-  hasChildren: boolean;
-  error?: string;
-  children?: WsNode[];
-}
-
-const isFolder = (k: string) => k === "directory" || k === "repo";
-
-async function list(path: string): Promise<WsNode[]> {
-  const r = await fetch(`/api/workspace?path=${encodeURIComponent(path)}&depth=1`);
-  if (!r.ok) {
-    let detail = r.statusText;
-    try { detail = (await r.json()).detail ?? detail; } catch { /* non-JSON */ }
-    throw new Error(detail);
-  }
-  return ((await r.json()).node?.children ?? []) as WsNode[];
-}
+export type { WsNode } from "../api/client";
 
 interface Shared {
   expanded: React.MutableRefObject<Set<string>>;
@@ -58,7 +37,7 @@ interface Shared {
 }
 
 function Row({ node, depth, sh }: { node: WsNode; depth: number; sh: Shared }) {
-  const folder = isFolder(node.kind);
+  const folder = folderKind(node.kind);
   const [open, setOpen] = useState(false);
   const [kids, setKids] = useState<WsNode[] | null>(node.children ?? null);
   const [loading, setLoading] = useState(false);
@@ -66,7 +45,7 @@ function Row({ node, depth, sh }: { node: WsNode; depth: number; sh: Shared }) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { setKids(await list(node.path)); setErr(""); }
+    try { setKids(await api.folderChildren(node.path)); setErr(""); }
     catch (e) { setErr(e instanceof Error ? e.message : "cannot read this folder"); }
     finally { setLoading(false); }
   }, [node.path]);
@@ -177,10 +156,8 @@ export function WorkspaceTree({ onOpenFile, onAttach, onUseFolder, selected, rev
      Effects must survive being run twice; the `live` flag is the only state that matters. */
   useEffect(() => {
     let live = true;
-    fetch("/api/workspace/roots").then(async (r) => {
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(d.detail ?? `the server answered ${r.status}`);
-      if (live) setRoots(d.roots ?? []);
+    api.folderRoots().then(roots => {
+      if (live) setRoots(roots);
     }).catch((e) => { if (live) setError(`cannot reach the workspace: ${e.message}`); });
     return () => { live = false; };
   }, []);
@@ -253,7 +230,7 @@ export function WorkspaceTree({ onOpenFile, onAttach, onUseFolder, selected, rev
       setNote(`attached ${node.name}`);
       return;
     }
-    if (id === "use-folder") { onUseFolder(node.path); setNote(`working in ${node.name}`); return; }
+    if (id === "use-folder") { onUseFolder(node.path); return; }
     if (id === "open") {
       const href = linkFor(node);
       if (href) window.open(href, "_blank", "noopener");

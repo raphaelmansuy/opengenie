@@ -30,6 +30,7 @@ from ..services import context as ctx_service
 from ..services.pyrun_service import PythonRuns
 from .llm_admin import can_configure
 from .sql import actor as sql_actor
+from ..domain.fence_rules import selected_folder
 from ..services.orchestrator import Orchestrator
 
 log = logging.getLogger("app.api")
@@ -227,7 +228,8 @@ async def list_sessions(request: Request,cursor:str='',limit:int=50) -> dict:
 async def create_session(request: Request, body: CreateSession) -> dict:
     model = body.model or _default_model(request)
     try:
-        s = await _orch(request).create(_user(request), body.folder, model, body.schema_, body.title,
+        folder = "/" if body.folder == "/" else selected_folder(body.folder)
+        s = await _orch(request).create(_user(request), folder, model, body.schema_, body.title,
                                         user_token=_user_token(request),
                                         write_mode=write_mode.parse(body.writeMode).value, principal=request.state.home)
     except ModelError as exc:
@@ -726,6 +728,20 @@ def _dbx_errors(what: str):
     except RuntimeError as exc:
         log.warning("%s failed: %s", what, exc)
         raise HTTPException(502, str(exc)) from exc
+
+
+@router.get("/workspace/folder-selection")
+async def inspect_folder_selection(request: Request, path: str) -> dict:
+    """Resolve a proposed write boundary without allocating a session or creating a folder."""
+    with _dbx_errors("folder selection"):
+        folder = selected_folder(path)
+        try:
+            status = await _browser(request).status(folder, _user_token(request))
+        except LookupError:
+            return {"path": folder, "exists": False}
+        if status.get("object_type") not in ("DIRECTORY", "REPO"):
+            raise ValueError("This path belongs to a workspace object. Choose a folder.")
+        return {"path": folder, "exists": True}
 
 
 @router.get("/workspace/object")

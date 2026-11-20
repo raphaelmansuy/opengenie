@@ -18,6 +18,10 @@ export async function localApp(options = {}) {
   Object.assign(env, { APP_AGENT_MODE: 'fake', APP_DEFAULT_MODEL: 'fake/model-a', APP_ALLOWED_MODELS: '["fake/model-a"]',
     APP_TOOL_MODE: 'none', APP_DEMO_SCENARIO: 'longrun', APP_DEMO_EVENT_DELAY: process.env.MISSION_EVENT_DELAY ?? '.12', APP_SESSION_DB_PATH: resolve(scratch, 'journal.sqlite'),
     APP_BLOB_DIR: resolve(scratch, 'blobs'), APP_STREAM_HEARTBEAT_SECONDS: '1', APP_DEV_USER: 'mission@example.test', DATABRICKS_HOST: '', APP_DEV_TOKEN_AUTO: '0' });
+  if (options.workspacePort) {
+    env.DATABRICKS_HOST = `http://127.0.0.1:${Number(options.workspacePort)}`;
+    env.APP_DEV_TOKEN = 'local-workspace-fixture';
+  }
   if (options.agentWork) Object.assign(env, { APP_CHANGES:'1', APP_OPERATIONS:'1', APP_ASSETS:'1', APP_EVIDENCE_V2:'1',
     APP_JOURNAL_V2:'1', APP_AGENT_WORKSPACE_DEMO:'1', APP_TOOL_MODE:'subprocess', APP_INTERNAL_URL:url, APP_AGENT_POLL_SECONDS:'.1' });
   if (options.pgDsn) Object.assign(env,{ APP_SESSION_DATABASE_URL:options.pgDsn, APP_AGENT_KEY:Buffer.from("t".repeat(32)).toString("base64") });

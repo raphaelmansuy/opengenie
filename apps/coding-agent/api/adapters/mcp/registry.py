@@ -11,6 +11,7 @@ import os
 import socket
 import tempfile
 
+from ...domain.fence_rules import writable_folder
 from ..child_env import child_env
 from pathlib import Path
 
@@ -109,7 +110,7 @@ class SubprocessToolRegistry:
             "NBMCP_PROFILE": "core",
             "NBMCP_ALLOW_WRITES": "1",
             "NBMCP_WRITE_SCHEMAS": schema or "",
-            "NBMCP_WRITE_PATHS": folder.rstrip("/") + "/",
+            "NBMCP_SESSION_FOLDER": writable_folder(folder),
             "NBMCP_WRITE_MODE": self._modes.get(session_id, "fenced"),
             "NBMCP_WRITE_APP_PREFIX": f"agent-{session_id[:8]}-",
             "NBMCP_WRITE_JOB_PREFIX": f"agent_{session_id[:8]}_",

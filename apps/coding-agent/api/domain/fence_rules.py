@@ -52,6 +52,24 @@ def is_unset(value: str | None) -> bool:
     return _clean(value).strip(" .").strip("/") == ""
 
 
+def selected_folder(raw: str) -> str:
+    """Canonical spelling of one explicit workspace selection."""
+    if len(raw) > 512 or any(ord(c) < 32 or ord(c) == 127 for c in raw):
+        raise ValueError("Use at most 512 characters and remove control characters.")
+    if raw != raw.strip():
+        raise ValueError("Remove leading or trailing whitespace from the folder path.")
+    path = raw.rstrip("/")
+    if not path.startswith("/") or path == "/Workspace":
+        raise ValueError("Choose a folder below the workspace root.")
+    if path.startswith("/Workspace/"):
+        path = path[len("/Workspace"):]
+    if (any(part in ("", ".", "..") for part in path[1:].split("/"))
+            or "\\" in path or path.endswith(('"', "'", "`", " "))
+            or path == "/Workspace" or path.startswith("/Workspace/")):
+        raise ValueError("Enter one absolute workspace path with unambiguous folder names.")
+    return path
+
+
 def writable_folder(folder: str | None) -> str:
     """The folder prefix a session may write into, as it is handed to the tool server.
 

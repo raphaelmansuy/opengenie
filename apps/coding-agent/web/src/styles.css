@@ -830,7 +830,7 @@ kbd { font-family: var(--mono); font-size: 11px; color: var(--ink-2); background
 .preview-toggle.is-on { background: var(--blue-100); color: var(--blue-600); border-color: var(--blue-300); }
 
 /* ---- the working-folder picker ------------------------------------------- */
-.folder-picker { min-width: 0; }
+
 .fp-trigger {
   display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; font: inherit;
   background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
@@ -844,55 +844,70 @@ kbd { font-family: var(--mono); font-size: 11px; color: var(--ink-2); background
 .fp-trigger-name { font-size: 13px; font-weight: 560; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fp-trigger-path { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fp-trigger-caret { color: var(--ink-3); flex: none; transform: rotate(90deg); }
-
+.fp-change { display: inline-flex; align-items: center; gap: 3px; color: var(--blue-600); font-weight: 600; }
 .fp-pop {
-  position: fixed; z-index: calc(var(--z-modal) + 1);
-  background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-lg);
-  display: flex; flex-direction: column; overflow: hidden; max-height: min(64vh, 420px);
-  animation: rise var(--dur) var(--ease);
+  width: min(500px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); padding: 0;
+  color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: 16px; box-shadow: var(--shadow-lg); overflow-y: auto; overscroll-behavior: contain;
 }
-@media (prefers-reduced-motion: reduce) { .fp-pop { animation: none; } }
-.fp-head { display: flex; align-items: center; gap: 7px; padding: 8px 9px; border-bottom: 1px solid var(--line); color: var(--ink-3); }
-.fp-search { flex: 1; min-width: 0; font: inherit; font-size: 13px; color: var(--ink);
-  background: var(--sunken); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
-  padding: 5px 8px; outline: 0; }
-.fp-search:focus-visible { border-color: var(--blue-600); box-shadow: 0 0 0 2px var(--blue-100); }
-.fp-hint { margin: 0; padding: 7px 10px; font-size: 11.5px; line-height: 1.4; color: var(--ink-2);
-  background: var(--blue-50); border-bottom: 1px solid var(--line); }
-.fp-list { overflow-y: auto; overscroll-behavior: contain; padding: 4px 0; min-height: 0; flex: 1; }
-.fp-row { display: flex; align-items: center; gap: 2px; min-height: 26px; padding-right: 6px; }
-.fp-row:hover { background: var(--surface-2); }
-.fp-row.is-current { background: var(--blue-50); }
-.fp-twisty { width: 18px; height: 22px; display: grid; place-items: center; border: 0; background: transparent;
-  color: var(--ink-3); flex: none; padding: 0; cursor: pointer; }
-.fp-twisty:disabled { cursor: default; opacity: 0; }
-.fp-twisty .is-open { transform: rotate(90deg); }
-.fp-twisty .icon { transition: transform var(--dur) var(--ease); }
-.fp-name { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; text-align: left;
-  font: inherit; font-size: 12.5px; color: var(--ink); background: transparent; border: 0;
-  padding: 3px 2px; border-radius: var(--radius-sm); }
-.fp-name:hover { color: var(--ink); }
-.fp-name .icon { color: var(--blue-600); flex: none; }
-.fp-name span:first-of-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fp-where { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--ink-3); flex: none; }
-.fp-badge { font-size: 10px; font-weight: 600; color: var(--blue-600); background: var(--blue-100);
-  border-radius: 20px; padding: 1px 7px; flex: none; }
-/* "Use" is revealed on hover and focus, so a long list reads as names, not as 40 buttons. It stays in
-   the layout (visibility, not display) so the row does not jump when the pointer arrives. */
-.fp-use { flex: none; font: inherit; font-size: 11px; font-weight: 560; color: var(--blue-600);
-  background: var(--surface); border: 1px solid var(--blue-300); border-radius: 20px; padding: 1px 8px;
-  visibility: hidden; }
-.fp-row:hover .fp-use, .fp-use:focus-visible { visibility: visible; }
-.fp-note { margin: 0; padding: 7px 10px; font-size: 11.5px; color: var(--ink-3); }
-.fp-note.is-err { color: var(--pink-700); }
-.fp-foot { display: flex; align-items: center; gap: 8px; padding: 7px 9px;
-  border-top: 1px solid var(--line); background: var(--surface-2); }
-.fp-foot-note { flex: 1; font-size: 11px; color: var(--ink-3); }
-.fp-type { display: flex; align-items: center; gap: 6px; width: 100%; }
-.fp-type input { flex: 1; min-width: 0; font: inherit; font-size: 12.5px; font-family: var(--mono);
-  padding: 5px 8px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong);
-  background: var(--surface); color: var(--ink); }
+.fp-pop::backdrop { background: rgb(20 25 44 / 40%); backdrop-filter: blur(2px); }
+.fp-heading { display: flex; align-items: start; gap: 14px; padding: 24px 24px 18px; }
+.fp-symbol, .fp-folder-icon { display: grid; place-items: center; flex: none; color: var(--blue-600); background: var(--blue-100); border-radius: 10px; }
+.fp-symbol { width: 44px; height: 44px; }
+.fp-heading h2 { margin: 0; font-size: 21px; line-height: 1.2; letter-spacing: -.025em; }
+.fp-heading p { margin: 6px 0 0; color: var(--ink-2); line-height: 1.5; font-size: 13px; }
+.fp-body { padding: 0 24px 18px; }
+.fp-tabs { display: flex; gap: 3px; padding: 3px; border-radius: 9px; background: var(--sunken); margin-bottom: 16px; }
+.fp-tabs button { flex: 1; border: 1px solid transparent; border-radius: 7px; background: transparent;
+  color: var(--ink-2); font: inherit; font-size: 13px; font-weight: 550; min-height: 35px; }
+.fp-tabs button[aria-pressed=true] { background: var(--surface); color: var(--ink); border-color: var(--line); box-shadow: var(--shadow-sm); }
+.fp-find { display: flex; align-items: center; gap: 9px; color: var(--ink-3); }
+.fp-find, .fp-field input { background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; padding: 9px 12px; }
+.fp-find:focus-within, .fp-field input:focus-visible { outline: 2px solid var(--blue-600); outline-offset: 1px; }
+.fp-find input, .fp-field input { min-width: 0; width: 100%; color: var(--ink); font: inherit; font-size: 14px; }
+.fp-find input { border: 0; outline: none; background: transparent; }
+.fp-field { display: grid; gap: 8px; font-size: 13px; font-weight: 560; }
+.fp-field input { font-family: var(--mono); font-weight: normal; }
+.fp-location { display: flex; align-items: center; min-height: 40px; gap: 5px; font-size: 12px; color: var(--ink-2); }
+.fp-location strong { overflow-wrap: anywhere; }
+.fp-location .icon-btn:last-child { margin-left: auto; }
+.fp-list { margin: 0; padding: 0; min-width: 0; min-height: min(174px, 30dvh); max-height: min(230px, 30dvh); overflow: auto;
+  border: 1px solid var(--line); border-radius: 9px; overscroll-behavior: contain; }
+.fp-row { display: flex; width: 100%; align-items: center; gap: 11px; padding: 9px 12px; min-height: 49px;
+  font: inherit; color: var(--ink-2); background: var(--surface); border: 0; text-align: left; }
+.fp-row + .fp-row { border-top: 1px solid var(--line); }
+.fp-row:hover, .fp-row:focus-visible { background: var(--surface-2); }
+.fp-row:focus-visible { outline-offset: -3px; }
+.fp-folder-icon { width: 31px; height: 31px; border-radius: 7px; background: var(--surface-2); }
+.fp-row-text { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.fp-row-text strong { font-size: 13px; color: var(--ink); font-weight: 560; }
+.fp-row-text small, .fp-scope code { font: 12px/1.45 var(--mono); color: var(--ink-2); overflow-wrap: anywhere; }
+.fp-row-text strong { overflow-wrap: anywhere; }
+.fp-current { color: var(--green-700); font-size: 11px; display: inline-flex; align-items: center; gap: 3px; }
+.fp-scope { display: flex; align-items: start; gap: 9px; background: var(--blue-50); border-radius: 8px;
+  padding: 11px 12px; margin-top: 16px; color: var(--blue-600); }
+.fp-scope > svg { flex: none; }
+.fp-scope .btn { margin-left: auto; align-self: center; }
+.fp-scope div { min-width: 0; display: grid; gap: 3px; }
+.fp-scope strong { font-size: 12px; }
+.fp-note, .fp-feedback { padding: 14px; margin: 0; font-size: 13px; color: var(--ink-2); overflow-wrap: anywhere; }
+.fp-field input[aria-invalid=true] { border-color: var(--pink-700); }
+.fp-search-hint { margin: 0 0 6px; color: var(--ink-2); font-size: 12px; }
+.fp-note .btn { margin-left: 8px; }
+.fp-feedback { margin-top: 10px; padding: 0; color: var(--pink-700); }
+.fp-actions { display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--line);
+  padding: 13px 24px; background: var(--surface-2); }
+.fp-actions button { min-height: 37px; }
+.fp-actions .btn.primary:disabled, .fp-actions .btn.primary:disabled:hover {
+  color: var(--ink-3); background: var(--sunken); border-color: var(--line); opacity: 1; cursor: default;
+}
+.mission-footer > button { margin-left: auto; flex: none; }
+@media (max-width: 540px) {
+  .fp-heading { padding: 18px 16px 15px; }
+  .fp-body { padding: 0 16px 16px; }
+  .fp-actions { padding: 12px 16px; }
+  .fp-actions button, .fp-tabs button, .fp-location .icon-btn { min-height: 44px; }
+}
 
 /* approval */
 .scrim { position: fixed; inset: 0; background: rgba(31, 41, 55, 0.28); backdrop-filter: blur(2px);

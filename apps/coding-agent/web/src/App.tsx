@@ -1,3 +1,4 @@
+import { FolderPicker } from "./components/FolderPicker";
 import { configureDraftScope } from "./domain/drafts";
 import { useStopWork, useArchiveReview } from "./components/WorkDialogs";
 import { AgentWorkProvider, SessionIdContext, WorkComposerBar, PendingWork } from "./components/AgentWork";
@@ -118,7 +119,9 @@ export function App() {
    *  honest version, then adopts the server's commit when `/api/version` answers. */
   const [build, setBuild] = useState<BuildFacts>(COMPILED);
   const [active, setActive] = useState<string | null>(null);
-  const [folder, setFolder] = useState("");
+  const [folderChoice, setFolderChoice] = useState<{ scope: string | null; path: string } | null>(null);
+  const folder = folderChoice?.scope === workspaceScope ? folderChoice.path : scratch;
+  const [picker, setPicker] = useState<{ session: string | null; scope: string | null; path?: string } | null>(null);
   const [model, setModel] = useState("");
   const [notice, setNotice] = useState("");
   /** A short confirmation that must be visible whatever is on screen (the empty state's `notice` is not). */
@@ -308,7 +311,6 @@ export function App() {
     return () => { alive = false; window.clearInterval(timer);
       document.removeEventListener("visibilitychange", poll); window.removeEventListener("online", poll); };
   }, []);
-  useEffect(() => { if (!folder && scratch) setFolder(scratch); }, [scratch, folder]);
   /* The assistant's visibility at first paint.
      Wide: it is a column and it is shown — that is the whole point of this shell.
      Mid/narrow: it is a DRAWER, and a drawer that opens by itself covers the workspace. An earlier
@@ -611,11 +613,25 @@ export function App() {
     void refresh();
   };
 
-  const useFolder = (path: string) => {
-    setFolder(path);
-    setActive(null);
-    setView(CHAT);
-    setNotice(`The next session will work in ${path}`);
+  const openFolder = (path?: string) => {
+    if (starting.current || submittingMissionRef.current) {
+      setToast("Wait for the message to finish sending before changing folders.");
+      return;
+    }
+    setPicker({ session: active, scope: workspaceScope, path });
+  };
+  const sessionFolder = session.id === active && session.folder
+    || savedSessions.find(item => item.id === active)?.folder || "";
+  const authorizedFolder = active ? sessionFolder : folder;
+  useEffect(() => {
+    if (picker && (picker.scope !== workspaceScope || picker.session !== active)) setPicker(null);
+  }, [picker, active, workspaceScope]);
+  const chooseFolder = (path: string) => {
+    setPicker(null);
+    setFolderChoice({ scope: workspaceScope, path });
+    if (active) newSession();
+    dismissRailDrawer();
+    setNotice(`The next conversation will work in ${path}`);
   };
   useEffect(() => { if (notice) { const id = window.setTimeout(() => setNotice(""), 6000); return () => window.clearTimeout(id); } }, [notice]);
 
@@ -673,7 +689,7 @@ export function App() {
   const setRailAndOpen = useCallback((r: RailTab) => { setLayoutTab(r); openRail(true); },
     [setLayoutTab, openRail]);
 
-  const searchRoot = computeSearchRoot(focus, session.folder || folder, scratch);
+  const searchRoot = computeSearchRoot(focus, authorizedFolder, scratch);
   /* Whether the active model can consume an image — the catalogue's DECLARED property, not a guess from
      the model's name. A name is not evidence, and a substring match here either blocked a working feature
      or shipped a picture to a blind model (spec 009 [CAP-2], [D7]). The server checks the same field again
@@ -827,6 +843,7 @@ export function App() {
        * A `switch` over the union is exhaustive: adding an `EscapeTarget` is now a compile error
        * rather than a silent fall-through. */
       stop: () => {
+        if (picker) { setPicker(null); return true; }
         if (settingsOpen) { setSettingsOpen(false); return true; }
         if (paletteOpen || keysOpen) { setPaletteOpen(false); setKeysOpen(false); return true; }
         /* Escape dismisses a TRANSIENT overlay, never a panel that has a column. The dock used to answer
@@ -841,16 +858,16 @@ export function App() {
         }
       },
     };
-  }, [docs, view, paletteOpen, keysOpen, settingsOpen, newSession, focusComposer, panels.escape, inspectorDrawer,
+  }, [docs, view, picker, paletteOpen, keysOpen, settingsOpen, newSession, focusComposer, panels.escape, inspectorDrawer,
       narrow, mode, layout, toggle, theme.cycle, toggleDock, selectTab, setRailAndOpen, closeDoc,
       openInspector, inspectorOnScreen, reopenDocument, openRail, railDrawn]);
 
   /* The context the arbiter needs, read live so the listener is registered once (007 KB-2). */
   const hotkeyContext = useMemo(() => ({
-    dialogOpen: () => settingsOpen || paletteOpen || keysOpen || Boolean(document.querySelector('[role="dialog"][aria-modal="true"]')),
+    dialogOpen: () => Boolean(picker) || settingsOpen || paletteOpen || keysOpen || Boolean(document.querySelector('[role="dialog"][aria-modal="true"]')),
     inCell: () => Boolean(document.activeElement?.closest?.(".cell-block")),
     running: () => Boolean(session.status === "streaming"),
-  }), [settingsOpen, paletteOpen, keysOpen, session.status]);
+  }), [picker, settingsOpen, paletteOpen, keysOpen, session.status]);
   useHotkeys(handlers, hotkeyContext);
   /* One delegated wheel listener: a contained scroller hands its remainder to the nearest scrollable
      ancestor, so a wheel at the edge of a cell's output keeps reading (specs/012 [SC-1]). */
@@ -895,11 +912,11 @@ export function App() {
     linkedCell: viewDoc && focus.docId === viewDoc.id ? focus.cell : null,
     live: busy,
     editing: {
-      folder: session.folder || folder || "",
+      folder: active ? authorizedFolder : "",
       sessionId: active,
       theme: theme.effective,
     },
-  }), [ask, addContext, focusCell, promptCell, copyLink, viewDoc, focus.docId, focus.cell, busy, session.folder, folder, active, theme.effective, documentDirty]);
+  }), [ask, addContext, focusCell, promptCell, copyLink, viewDoc, focus.docId, focus.cell, busy, authorizedFolder, active, theme.effective, documentDirty]);
 
   const modelControl = (variant: "chip" | "inline") => (
     <ModelControl
@@ -966,7 +983,7 @@ export function App() {
         {rail === "files" && (
           <FilesPane selected={selectedRef} revision={treeRev}
             onOpenFile={(n: WsNode) => { const d = docForNode(n.kind, n.path); if (d) openDoc(d); }}
-            onAttach={addContext} onUseFolder={useFolder} />
+            onAttach={addContext} onUseFolder={openFolder} />
         )}
         {rail === "catalog" && (
           <div className="rail-tree">
@@ -1046,7 +1063,11 @@ export function App() {
         {/* `--dock-w` lives on `.app` because a drawer is rendered as a SIBLING of `.layout`, not inside
             it. It is the dock's own width, so the inspector drawer can open to its left instead of on
             top of it: the facts must never cover the conversation they describe (007 ZN-2). */}
-        {stopDialog}{archiveReview.dialog}<div className="app" style={{ "--dock-w": dockColumn ? `${layout.assistantWidth}px` : "0px" } as React.CSSProperties}>
+        {stopDialog}{archiveReview.dialog}
+        {picker && picker.session === active && picker.scope === workspaceScope && <FolderPicker
+          current={authorizedFolder} initialPath={picker.path} switching={Boolean(active)}
+          onClose={() => setPicker(null)} onChoose={chooseFolder} />}
+        <div className="app" style={{ "--dock-w": dockColumn ? `${layout.assistantWidth}px` : "0px" } as React.CSSProperties}>
           <header className="topbar">
             <SkipLinks />
             <h1 className="brand"><LogoBadge size={21} tone="accent" /> <Wordmark /></h1>
@@ -1110,7 +1131,7 @@ export function App() {
                 onFocus={() => { toggle("rail", false); toggle("assistant", false); toggle("inspector", false); setDrawer(null); setDockDrawer(false); }} />
             </span>
             {/* Outside `.meta`: that cluster clips its overflow so it can shrink, and a popover inside it is cut off. */}
-            <AccountMenu user={user} host={workspace?.host ?? null} folder={folder || scratch} demo={demo}
+            <AccountMenu user={user} host={workspace?.host ?? null} folder={authorizedFolder} onFolder={() => openFolder()} demo={demo}
               build={build}
               onProviders={() => setSettingsOpen(true)} onKeys={() => setKeysOpen(true)} />
           </header>
@@ -1165,7 +1186,7 @@ export function App() {
               ) : viewDoc ? (
                 viewDoc.kind === "query" || viewDoc.kind === "query-draft"
                   ? <QueryEditor agentChanges={session.sqlChanges} key={`${workspaceScope}|${viewDoc.id}`} doc={viewDoc} scope={workspaceScope || user} theme={theme.effective}
-                    folder={folder || scratch} onDirty={documentDirty} onRename={renameSql} onSaved={savedSql}
+                    folder={authorizedFolder} onDirty={documentDirty} onRename={renameSql} onSaved={savedSql}
                     onCapture={capture => { queryCapture.current = capture; }}
                     onAttach={a => { addContext(a); reveal(); }} />
                   : viewDoc.kind === "table"
@@ -1186,7 +1207,7 @@ export function App() {
                                 onAsk={(prompt) => void start(prompt, [])} />
                             : <NotebookViewer key={viewDoc.id} doc={viewDoc} actions={viewerActions} />
               ) : active ? (
-                <MissionScreen key={active} session={session} conn={conn} dockVisible={dockOnScreen} error={error}
+                <MissionScreen onChooseFolder={() => openFolder()} key={active} session={session} conn={conn} dockVisible={dockOnScreen} error={error}
                   onOpen={openDoc} onConversation={() => { reveal(); requestAnimationFrame(() => dockComposer.current?.focus()); }}
                   onStop={stop} onRestore={restore} />
               ) : (
@@ -1194,7 +1215,7 @@ export function App() {
                    `else` of `!dockOnScreen`, so a window where the dock was on screen but nothing was
                    open rendered an EMPTY canvas: a white page with a composer, which is what the
                    760 px screenshot showed. The centre must always have something to say. */
-                <EmptyState catalogue={catalogue} folder={folder} onFolder={setFolder} model={model}
+                <EmptyState catalogue={catalogue} folder={folder} onFolder={() => openFolder()} model={model}
                   onModel={setModel} onAddKey={() => setSettingsOpen(true)}
                   demo={demo} notice={notice} user={user}
                   onStart={(p) => start(p, attachments).then(() => setAttachments([]))}
@@ -1253,7 +1274,7 @@ export function App() {
                 resized at all. The room test is the layout module's, not a second literal. */}
             {inspectorColumn && (
               <Inspector session={session} onHide={() => openInspector(false)} activeId={active}
-                folder={folder || scratch} onAddKey={() => setSettingsOpen(true)}
+                folder={authorizedFolder} onAddKey={() => setSettingsOpen(true)}
                 edge={<Separator zone="inspector" width={layout.inspectorWidth}
                   {...bounds("inspector", layout, viewport)} label="Resize the inspector"
                   onResize={(px) => setWidth("inspector", px)} onReset={() => resetOne("inspector")} />} />
@@ -1272,7 +1293,7 @@ export function App() {
             {inspectorDrawer && inspectorInGrid && (
               <Inspector session={session} onHide={() => openInspector(false)}
                 className="is-drawer below-bar"
-                folder={folder || scratch} activeId={active} onAddKey={() => setSettingsOpen(true)} />
+                folder={authorizedFolder} activeId={active} onAddKey={() => setSettingsOpen(true)} />
             )}
           </div>
 
@@ -1281,7 +1302,7 @@ export function App() {
               is the layout module's answer, not a second guess made here. */}
           {inspectorDrawer && !inspectorInGrid && (
             <Inspector session={session} onHide={() => openInspector(false)} className="is-drawer"
-              folder={folder || scratch} activeId={active} onAddKey={() => setSettingsOpen(true)} />
+              folder={authorizedFolder} activeId={active} onAddKey={() => setSettingsOpen(true)} />
           )}
 
           {/* The scrim belongs to the drawers that cover the work *against the user's wish* — the

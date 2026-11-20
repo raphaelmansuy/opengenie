@@ -47,33 +47,21 @@ for (const w of [1440, 1100, 800]) {
     await p.waitForTimeout(1200);
     check("the picker shows the workspace roots", (await p.locator(".fp-pop .fp-row").count()) >= 2);
     await shot(p, "1440-2-picker.png");
-    // expand the home folder and pick agent_scratch
-    // The current folder is expanded and scrolled into view when the picker opens.
-    await p.waitForFunction(() => [...document.querySelectorAll(".fp-pop .fp-row")]
-      .some((e) => /agent_scratch/.test(e.textContent ?? "")), null, { timeout: 15000 }).catch(() => {});
-    const target = p.locator(".fp-pop .fp-row.is-current").first();
-    const found = await target.count();
-    check("the current folder is already expanded and marked", found > 0);
-    if (found) {
-      // Choose a DIFFERENT folder: its parent's sibling, so the fence really changes.
-      const other = p.locator(".fp-pop .fp-row", { hasText: "taxi_hours" }).first();
-      const pickRow = (await other.count()) ? other : p.locator(".fp-pop .fp-row .fp-use").first().locator("..");
-      await pickRow.hover();
-      await pickRow.locator(".fp-use").click();
-      await p.waitForTimeout(600);
-      check("choosing a folder closes the picker", (await p.locator(".fp-pop").count()) === 0);
-      const now = await p.locator(".fp-trigger-path").innerText();
-      check("the fence now names the chosen folder", now.length > 1, now);
-    }
+    const currentPath = await p.locator(".fp-trigger-path").innerText();
+    const other = p.locator(".fp-pop .fp-row").filter({hasNot: p.getByText(currentPath, {exact:true})}).first();
+    await other.click();
+    await p.getByRole("button", {name:"Use this folder", exact:true}).click();
+    await p.locator(".fp-pop").waitFor({state:"hidden"});
+    check("the chosen fence is visible", (await p.locator(".fp-trigger-path").innerText()) !== currentPath);
     await shot(p, "1440-3-picked.png");
     // search inside the picker
     await p.locator(".fp-trigger").click();
     await p.locator(".fp-pop").waitFor({ timeout: 8000 });
     await p.locator(".fp-search").fill("agent_scratch");
     // The workspace API has no name search: this walks folders, so it takes seconds on a real one.
-    await p.waitForFunction(() => [...document.querySelectorAll(".fp-pop .fp-use")].length > 0,
+    await p.waitForFunction(() => [...document.querySelectorAll(".fp-pop .fp-row")].length > 0,
       null, { timeout: 45000 }).catch(() => {});
-    check("the picker searches folders", (await p.locator(".fp-pop .fp-use").count()) >= 1);
+    check("the picker searches folders", (await p.locator(".fp-pop .fp-row").count()) >= 1);
     await shot(p, "1440-4-search.png");
     await p.keyboard.press("Escape");
     await p.waitForTimeout(300);

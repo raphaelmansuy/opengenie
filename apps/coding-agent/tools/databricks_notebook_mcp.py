@@ -544,7 +544,11 @@ def _need_writes(what: str = "change anything") -> None:
 #   NBMCP_WRITE_SCHEMAS  comma list of  catalog.schema   (SQL DDL/DML)
 #   NBMCP_WRITE_PATHS    comma list of  /Workspace/... or /Users/... prefixes
 WRITE_SCHEMAS = [s.strip().lower() for s in os.environ.get("NBMCP_WRITE_SCHEMAS", "").split(",") if s.strip()]
-WRITE_PATHS = [p.strip() for p in os.environ.get("NBMCP_WRITE_PATHS", "").split(",") if p.strip()]
+# A session has exactly one folder, which can itself contain commas.
+if "NBMCP_SESSION_FOLDER" in os.environ:
+    WRITE_PATHS = [os.environ["NBMCP_SESSION_FOLDER"]]
+else:
+    WRITE_PATHS = [p.strip() for p in os.environ.get("NBMCP_WRITE_PATHS", "").split(",") if p.strip()]
 
 def _check_sql_scope(sql: str) -> str | None:
     return check_scope(sql, WRITE_SCHEMAS)
