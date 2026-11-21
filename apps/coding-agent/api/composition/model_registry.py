@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 from ..domain.llm.agent_config import AgentConfig
 from ..adapters.llm.discovery import DatabricksDiscovery
+from ..adapters.llm.discovery.gateway import GatewayDiscovery
 from ..adapters.llm.store.memory import MemoryRegistryStore
 from ..adapters.llm.store.seed_store import SeedRegistryStore
 from ..adapters.llm.store.seed import load as load_seed
@@ -67,7 +68,8 @@ async def build_registry(cfg: Settings, *, host: str = "") -> Registry:
     )
     default = getattr(store, "default_model", "") or cfg.default_model
     service = ModelService(
-        store, discovery, default_model=default, allow_external=cfg.llm_allow_external, vault=vault
+        store, discovery, default_model=default, allow_external=cfg.llm_allow_external, vault=vault,
+        gateway_discovery=GatewayDiscovery.from_settings(cfg),
     )
     credentials = CredentialService(vault, providers=adapter_for)
     resolver = ModelResolver(
@@ -442,7 +444,8 @@ def build_registry_sync(cfg: Settings) -> Registry:
     )
     default = getattr(store, "default_model", "") or cfg.default_model
     service = ModelService(
-        store, discovery, default_model=default, allow_external=cfg.llm_allow_external, vault=vault
+        store, discovery, default_model=default, allow_external=cfg.llm_allow_external, vault=vault,
+        gateway_discovery=GatewayDiscovery.from_settings(cfg),
     )
     credentials = CredentialService(vault, providers=adapter_for)
     resolver = ModelResolver(

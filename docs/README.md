@@ -49,6 +49,7 @@ flowchart LR
 | 08 | [**Architecture**](08-architecture.md) | change the code | Context, containers, the five layers, one turn end to end, the state machines, and every rejected alternative |
 | 09 | [**Security**](09-security.md) | audit it | The three identities, the five authorisation decisions, the fence, envelope encryption, and ten named gaps |
 | 10 | [The data model](10-data-model.md) | query it or store something in it | Two schemas, eleven tables, three kinds of file, and what is deliberately not stored |
+| - | [Configure the Generic AI Gateway](../specs/07-ai-gateway/13-configuration.md) | point the app at XAIA | The base URL, the subscription key, and the picker rows |
 | - | [Glossary](glossary.md) | meet a new word | Every term used here, in plain words |
 | - | [Original specification](genie-code-replacement-spec.md) | go deeper | The first, longer study: the 5 Whys, capability register, 16 experiments, cost model |
 

@@ -36,6 +36,8 @@ class ProviderKind(str, Enum):
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     GOOGLE_VERTEX = "google_vertex"
+    #: Azure API Management in front of several model formats. External: its own subscription key.
+    GATEWAY = "gateway"
     FAKE = "fake"
 
 
@@ -47,6 +49,9 @@ class WireProtocol(str, Enum):
     ANTHROPIC = "anthropic"                # messages API, x-api-key + anthropic-version
     VERTEX_OPENAI = "vertex_openai"        # Vertex AI's OpenAI-compatible endpoint
     VERTEX_NATIVE = "vertex_native"        # Vertex generateContent, round-trips thought_signature
+    GATEWAY_OPENAI = "gateway_openai"      # deployments chat-completions, header api-key
+    GATEWAY_ANTHROPIC = "gateway_anthropic"
+    GATEWAY_EMBED = "gateway_embed"
     FAKE = "fake"                          # no wire: the demo agent replays a recording
 
 
@@ -59,6 +64,8 @@ def agent_prefix(provider: "ProviderKind", wire: WireProtocol | None = None) -> 
     """
     if provider is ProviderKind.GOOGLE_VERTEX:
         return "google-vertex" if wire in (None, WireProtocol.VERTEX_NATIVE) else "vertex"
+    if provider is ProviderKind.GATEWAY:
+        return "gateway-anthropic" if wire is WireProtocol.GATEWAY_ANTHROPIC else "gateway"
     return {
         ProviderKind.DATABRICKS: "dbx",
         ProviderKind.OPENAI: "openai",
@@ -205,6 +212,7 @@ class ModelId:
 
 #: Group headings, in picker order (07 §Grouping and order). Data, not a switch in the UI.
 GROUP_GATEWAY = "Databricks · AI Gateway"
+GROUP_GENERIC = "Generic AI Gateway"
 GROUP_YOURS = "Your providers"
 GROUP_WORKSPACE = "Workspace providers"
 GROUP_UNAVAILABLE = "Not available here"

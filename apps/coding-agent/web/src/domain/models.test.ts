@@ -14,6 +14,7 @@ import {
   groupOf,
   GROUP_DEMO,
   GROUP_GATEWAY,
+  GROUP_GENERIC,
   GROUP_UNAVAILABLE,
   GROUP_YOURS,
   label,
@@ -161,6 +162,21 @@ describe("grouping and order", () => {
     expect(providerTag(gemini)).toBe("vertex");
     expect(providerTag(spec())).toBe("gateway");
     expect(providerTag(spec({ id: "fake/x", provider: "fake", providerName: "The demo agent" }))).toBe("demo");
+    expect(providerTag(spec({ id: "gateway/gpt-5.6-terra", provider: "gateway", providerName: "Generic AI Gateway" }))).toBe("catalog");
+  });
+
+  it("ranks Generic AI Gateway immediately after Databricks · AI Gateway", () => {
+    const generic = spec({
+      id: "gateway/gpt-5.6-terra",
+      name: "Terra",
+      provider: "gateway",
+      providerName: "Generic AI Gateway",
+      wire: "gateway_openai",
+      group: GROUP_GENERIC,
+      credential: { kind: "api_key", source: "env", hint: "api key …abcd" },
+      endpoint: "gpt-5.6-terra",
+    });
+    expect(groupModels([generic, spec()]).map((g) => g.name)).toEqual([GROUP_GATEWAY, GROUP_GENERIC]);
   });
 
   it("puts the current model first inside its group", () => {

@@ -46,6 +46,8 @@ class ProviderBlock:
     models: dict[str, dict] = field(default_factory=dict)
     headers: dict[str, str] = field(default_factory=dict)
     tool_streaming: bool | None = None
+    #: Azure OpenAI query parameter. Emitted only when set, so serving blocks stay byte-identical.
+    api_version: str = ""
     #: A provider the agent ships built in (Vertex's native wire). It authenticates from the
     #: environment on its own, so the block carries only the model limits: no URL, no key reference.
     builtin: bool = False
@@ -54,6 +56,8 @@ class ProviderBlock:
         if self.builtin:
             return {"name": self.display_name or self.name, "models": self.models}
         options: dict = {"baseURL": self.base_url, "apiKey": f"{{env:{self.env}}}"}
+        if self.api_version:
+            options["apiVersion"] = self.api_version
         if self.headers:
             # A header may also reference a variable; a literal here would be a secret on disk.
             options["headers"] = {k: _templated(v, self.env) for k, v in self.headers.items()}
@@ -89,6 +93,7 @@ class AgentConfig:
     provider_display_name: str = "Databricks serving endpoints"
     tool_streaming: bool | None = None
     headers: dict[str, str] = field(default_factory=dict)
+    api_version: str = ""
     #: Whether this model accepts image input, declared by the catalogue (spec 009 [D7]).
     #: It is written into `opencode.json` as `attachment` + `modalities`, because opencode resolves
     #: capabilities CLIENT-SIDE: a model it believes is text-only has its images silently replaced by
@@ -120,6 +125,7 @@ class AgentConfig:
             provider_display_name=_display(resolved),
             tool_streaming=resolved.options.get("toolStreaming") if resolved.options else None,
             headers=dict((resolved.options or {}).get("headers") or {}),
+            api_version=str((resolved.options or {}).get("apiVersion") or ""),
             # Carried from the model spec through the resolver, so the agent is told the same fact the
             # catalogue publishes and the server enforces.
             sees_images=bool(getattr(resolved, "sees_images", False)),
@@ -139,6 +145,7 @@ class AgentConfig:
                 )
             },
             headers=self.headers,
+            api_version=self.api_version,
             tool_streaming=self.tool_streaming,
             builtin=self.wire is WireProtocol.VERTEX_NATIVE,
         )
@@ -245,6 +252,7 @@ def _display(resolved: ResolvedModel) -> str:
         ProviderKind.ANTHROPIC: "Anthropic",
         ProviderKind.GOOGLE_VERTEX: "Google Vertex AI",
         ProviderKind.FAKE: "Databricks serving endpoints",
+        ProviderKind.GATEWAY: "Generic AI Gateway",
     }.get(resolved.provider, resolved.provider.value)
 
 

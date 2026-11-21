@@ -107,6 +107,7 @@ class ModelService:
         allow_external: bool = True,
         vault=None,
         ttl: float = 30.0,
+        gateway_discovery=None,
     ) -> None:
         self._store = store
         self._discovery = discovery
@@ -114,6 +115,7 @@ class ModelService:
         self._allow_external = allow_external
         self._vault = vault
         self._ttl = ttl
+        self._gateway_discovery = gateway_discovery
         self._last: Catalogue | None = None
         self._cached_at = 0.0
 
@@ -187,6 +189,8 @@ class ModelService:
                 if spec.id.provider is ProviderKind.DATABRICKS and key not in seen:
                     by_id[key] = replace(spec, state=ModelState.NOT_SERVED)
 
+        await self._fold_gateway(by_id)
+
         out = [await self._decorate(spec) for spec in by_id.values()]
         return _order(out)
 
@@ -202,6 +206,27 @@ class ModelService:
             return None
         specs = getattr(result, "specs", result)
         return list(specs) if specs is not None else None
+
+    async def _fold_gateway(self, by_id: dict[str, ModelSpec]) -> None:
+        """Upsert gateway deployments. A seed row wins on the same id. Serving rows are not touched."""
+        if self._gateway_discovery is None:
+            return
+        try:
+            result = await self._gateway_discovery.fetch(None)
+        except Exception:  # noqa: BLE001 - an unread list must not change the catalogue
+            return
+        if getattr(result, "readable", False) is not True:
+            return
+        specs = list(getattr(result, "specs", ()) or ())
+        seen = {spec.id.value for spec in specs}
+        for spec in specs:
+            existing = by_id.get(spec.id.value)
+            if existing is not None and existing.origin == "seed":
+                continue
+            by_id[spec.id.value] = spec if existing is None else _merge_one(existing, spec)
+        for key, spec in list(by_id.items()):
+            if spec.id.provider is ProviderKind.GATEWAY and spec.origin == "discovery" and key not in seen:
+                by_id[key] = replace(spec, state=ModelState.NOT_SERVED)
 
     async def _decorate(self, spec: ModelSpec) -> ModelSpec:
         """Add the facts that do not come from the row: health history, egress policy, key presence."""

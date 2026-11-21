@@ -160,6 +160,7 @@ export function providerTag(spec: ModelSpec): string {
     anthropic: "anthropic",
     google_vertex: "vertex",
     fake: "demo",
+    gateway: "catalog",
   };
   return tags[spec.provider] ?? spec.provider;
 }
@@ -167,6 +168,7 @@ export function providerTag(spec: ModelSpec): string {
 /* ------------------------------------------------------------------ grouping */
 
 export const GROUP_GATEWAY = "Databricks · AI Gateway";
+export const GROUP_GENERIC = "Generic AI Gateway";
 export const GROUP_YOURS = "Your providers";
 export const GROUP_WORKSPACE = "Workspace providers";
 export const GROUP_UNAVAILABLE = "Not available here";
@@ -192,7 +194,7 @@ export function groupOf(spec: ModelSpec): string {
 }
 
 /** Group order, then "the current model first", then availability, then name (case-insensitively). */
-const GROUP_RANK = [GROUP_GATEWAY, GROUP_DEMO, GROUP_YOURS, GROUP_WORKSPACE, GROUP_UNAVAILABLE];
+const GROUP_RANK = [GROUP_GATEWAY, GROUP_GENERIC, GROUP_DEMO, GROUP_YOURS, GROUP_WORKSPACE, GROUP_UNAVAILABLE];
 
 const STATE_RANK: Record<ModelState, number> = {
   available: 0,
