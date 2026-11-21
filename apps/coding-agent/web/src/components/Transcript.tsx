@@ -184,13 +184,23 @@ function Evidence({ turn }: { turn: Turn }) {
         <span className="count">{allProven ? `all ${turn.evidence.length} proven` : `${ok} of ${turn.evidence.length} proven`}</span>
         <span className="chev" aria-hidden>{shown ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</span>
       </button>
-      {shown && proof.map(({ row: r, verified }, i) => (
-        <div key={i} className={`evidence-row${verified ? "" : " unverified"}`}>
-          <span className="tick" aria-hidden>{verified ? <Check size={13} /> : <Alert size={13} />}</span>
-          <span className="req">{r.requirement || "(unnamed requirement)"}</span>
-          <span className="ev-tool" title={r.tool || "no tool"}>{r.tool || "no tool"}</span>
-        </div>
-      ))}
+      {shown && proof.map(({ row: r, verified }, i) => {
+        const grade = (r.grade || (verified ? "verified" : "unverified")).toLowerCase();
+        const gradeLabel = grade[0].toUpperCase() + grade.slice(1);
+        return (
+          <div key={i} className={`evidence-row${verified ? "" : " unverified"} is-grade-${grade}`}>
+            <span className="tick" aria-hidden>{verified ? <Check size={13} /> : <Alert size={13} />}</span>
+            <span className="ev-body">
+              <span className="req">{r.requirement || "(unnamed requirement)"}</span>
+              {r.reason && (grade === "contradicted" || !verified) && (
+                <span className="ev-reason">{r.reason}</span>
+              )}
+            </span>
+            <span className={`ev-grade is-${grade}`}>{gradeLabel}</span>
+            <span className="ev-tool" title={r.tool || "no tool"}>{r.tool || "no tool"}</span>
+          </div>
+        );
+      })}
     </section>
   );
 }

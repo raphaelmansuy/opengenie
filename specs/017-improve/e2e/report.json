@@ -1,0 +1,42 @@
+{
+  "pass": true,
+  "captures": [
+    {
+      "name": "01-desktop-light-diff-unified",
+      "path": "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/017-improve/e2e/screenshots/01-desktop-light-diff-unified.png",
+      "scrollWidth": 1440,
+      "innerWidth": 1440
+    },
+    {
+      "name": "02-desktop-light-diff-split-tools",
+      "path": "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/017-improve/e2e/screenshots/02-desktop-light-diff-split-tools.png",
+      "scrollWidth": 1440,
+      "innerWidth": 1440
+    },
+    {
+      "name": "05-desktop-dark-diff-and-meter",
+      "path": "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/017-improve/e2e/screenshots/05-desktop-dark-diff-and-meter.png",
+      "scrollWidth": 1440,
+      "innerWidth": 1440
+    },
+    {
+      "name": "06-mobile-narrow-dark",
+      "path": "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/017-improve/e2e/screenshots/06-mobile-narrow-dark.png",
+      "scrollWidth": 390,
+      "innerWidth": 390
+    },
+    {
+      "name": "03-desktop-light-evidence-compaction",
+      "path": "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/017-improve/e2e/screenshots/03-desktop-light-evidence-compaction.png",
+      "scrollWidth": 1440,
+      "innerWidth": 1440
+    },
+    {
+      "name": "04-desktop-light-cell-diagnose-insert",
+      "path": "/Users/raphaelmansuy/Github/03-working/edgegenie/specs/017-improve/e2e/screenshots/04-desktop-light-cell-diagnose-insert.png",
+      "scrollWidth": 1440,
+      "innerWidth": 1440
+    }
+  ],
+  "errors": []
+}

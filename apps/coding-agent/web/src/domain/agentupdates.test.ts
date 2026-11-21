@@ -24,3 +24,24 @@ it("chunk metadata does not overwrite the compaction entity metadata", () => {
  rows=patchCompaction(rows,{compactionId:"a",content:{type:"text",text:"chunk"},_meta:{scope:"chunk"}});
  expect(rows[0].meta).toEqual({scope:"entity"});
 });
+
+it("accepts server session.compacted payloads with string summary and idempotent replay (E11, E12)", () => {
+ const ev = {
+  compactionId: "cmp_server_1",
+  status: "completed",
+  seq: 42,
+  kept: ["t1", "t8"],
+  summarised: ["t2", "t3", "t4"],
+  tokensBefore: 18000,
+  tokensAfter: 6000,
+  summary: "Summarised 3 middle turns (18,000 -> 6,000 tokens).",
+ };
+ let rows = patchCompaction([], ev);
+ expect(rows).toHaveLength(1);
+ expect(rows[0].id).toBe("cmp_server_1");
+ expect(rows[0].status).toBe("completed");
+ expect(rows[0].summary).toEqual([{ type: "text", text: ev.summary }]);
+ // Replaying the exact same SSE event does not duplicate rows
+ rows = patchCompaction(rows, ev);
+ expect(rows).toHaveLength(1);
+});

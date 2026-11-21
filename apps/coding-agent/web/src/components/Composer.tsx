@@ -7,7 +7,7 @@ import { SessionFeatures } from "./AgentWork";
  */
 import { createElement, useId, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api, type CatalogItem, type WsHit } from "../api/client";
-import { applyCommand, commandAt, matchCommands, pushHistory, stepHistory, type Command } from "../domain/commands";
+import { applyCommand, commandAt, isCompactCommand, matchCommands, pushHistory, stepHistory, type Command } from "../domain/commands";
 import type { Attachment } from "../domain/events";
 import { reasonText, type BlockedReason } from "../domain/compose";
 import { canAttach, type Doc } from "../domain/docs";
@@ -29,7 +29,7 @@ export { Chip } from "./Chip";
 interface Option { a: Attachment; hint: string }
 export interface MissionDelivery { state: "sending" | "accepted" | "failed"; text: string; error?: string }
 
-export function Composer({ blockedReason: why, busy, onSend, onStop, attachments, auto, onAdd, onRemove, openDocs, placeholder, inputRef,
+export function Composer({ blockedReason: why, busy, onSend, onCompact, onStop, attachments, auto, onAdd, onRemove, openDocs, placeholder, inputRef,
   variant = "main", compact = false, modelSlot, searchRoot, sessionId = null, modelSeesImages = true, modelName, delivery, onDeliveryDismiss }: {
   delivery?: MissionDelivery | null;
   onDeliveryDismiss?: () => void;
@@ -41,7 +41,9 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
    *  (specs/012 02 §F7). It is now the reason from `domain/compose`, so the component cannot be told
    *  "disabled" without also being told why, and the connection cannot reach it at all. */
   blockedReason?: BlockedReason | null; busy: boolean;
-  onSend: (text: string, mine?: Attachment[]) => Promise<void>; onStop: () => void;
+  onSend: (text: string, mine?: Attachment[]) => Promise<void>;
+  onCompact?: () => Promise<{ changed: boolean; reason?: string; summarised?: string[] } | void>;
+  onStop: () => void;
   /** Lets the app focus the box from a shortcut (⌘L) without prop-drilling a callback. */
   inputRef?: { current: HTMLTextAreaElement | null };
   attachments: Attachment[]; auto?: Attachment | null;
@@ -107,6 +109,11 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
      there is exactly one list of them (spec 009 [D1], [P5]). */
   const blobs = useBlobUpload(sessionId);
   const [dragging, setDragging] = useState(false);
+
+  useEffect(() => {
+    setSendNotice("");
+    setFailure("");
+  }, [sessionId]);
 
   const attachCount = () => attachments.filter((a) => a.kind === "blob").length + blobs.chips.length;
 
@@ -199,9 +206,38 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
     requestAnimationFrame(() => { ref.current?.focus(); ref.current?.setSelectionRange(before.length, before.length); });
   };
 
+  const runCompact = async () => {
+    if (!onCompact || sending || sendingRef.current || blocked) return;
+    if (busy) {
+      setSendNotice("Wait for the current turn to finish before compacting.");
+      return;
+    }
+    sendingRef.current = true;
+    setSending(true);
+    setFailure("");
+    setSendNotice("Compacting conversation context…");
+    try {
+      await onCompact();
+      setText("");
+      setCaret(0);
+      // AgentMeter displays the unified compactNotice so we never render duplicate banners.
+      setSendNotice("");
+    } catch (e) {
+      setSendNotice("");
+      setFailure(e instanceof Error && e.message ? e.message : "Could not compact this session.");
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
+    }
+  };
+
   const submit = async () => {
     const value = text.trim();
     if (!value || sending || sendingRef.current || blocked || blobs.busy) return;
+    if (isCompactCommand(value) && onCompact) {
+      await runCompact();
+      return;
+    }
     sendingRef.current = true;
     setSending(true);
     setSendNotice("Sending mission — preparing context and waiting for server acceptance…");
@@ -247,6 +283,11 @@ export function Composer({ blockedReason: why, busy, onSend, onStop, attachments
   };
 
   const pickCommand = (c: Command) => {
+    if (isCompactCommand(c.insert) && onCompact) {
+      setDismissed("");
+      void runCompact();
+      return;
+    }
     const r = applyCommand(text, caret, c);
     setText(r.text);
     setCaret(r.caret);

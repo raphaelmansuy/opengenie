@@ -1,11 +1,11 @@
 /** Shared AST renderer. Surface profiles control presentation, never source or persistence. */
-import { Component, createElement, memo, useContext, useId, useMemo, type ReactNode } from "react";
+import { Component, createElement, memo, useContext, useId, useMemo, useState, type ReactNode } from "react";
 import type { Nodes, Table } from "mdast";
 import { parseMarkdown } from "../domain/markdown/parse";
 import { destination, headingId, headingSlug } from "../domain/markdown/policy";
 import { splitStashed } from "../domain/math";
 import { splitPaths, workspaceUrl } from "../domain/links";
-import { WorkspaceLinks, OpenSqlQuery } from "./DocContext";
+import { InsertNotebookCell, OpenSqlQuery, WorkspaceLinks } from "./DocContext";
 import { Math as MathNode } from "./Math";
 import { CopyButton } from "./CopyButton";
 import { MarkdownImage } from "./MarkdownImage";
@@ -22,11 +22,34 @@ class RenderBoundary extends Component<{ text: string; children: ReactNode }, { 
 function Fallback({ text, reason }: { text: string; reason: string }) {
   return <div className="markdown-fallback" role="region" aria-label="Preview unavailable"><p role="status">Preview unavailable. {reason}</p><CopyButton text={text} label="Copy source" /><pre>{text.slice(0, 20_000)}</pre></div>;
 }
+function InsertCellButton({ code, lang, disabled, onInsert }: {
+  code: string; lang?: string; disabled?: boolean; onInsert: (code: string, lang?: string) => boolean;
+}) {
+  const [inserted, setInserted] = useState(false);
+  return (
+    <button
+      type="button"
+      className="code-insert-button"
+      disabled={disabled}
+      title="Append this snippet as a new cell in the active notebook"
+      onClick={() => {
+        if (onInsert(code, lang)) {
+          setInserted(true);
+          window.setTimeout(() => setInserted(false), 1800);
+        }
+      }}
+    >
+      {inserted ? "Inserted" : "Insert cell"}
+    </button>
+  );
+}
+
 function MarkdownView({ text, streaming = false, surface = "answer", namespace, documentPath = "", model: suppliedModel }: MarkdownProps) {
   const generatedId = useId();
   const ns = namespace || generatedId;
   const ws = useContext(WorkspaceLinks);
   const openSql = useContext(OpenSqlQuery);
+  const insertCell = useContext(InsertNotebookCell);
   const model = useMemo(() => suppliedModel ?? parseMarkdown(text), [text, suppliedModel]);
   const definitions = useMemo(() => new Map(model.tree.children.filter(n => n.type === "definition").map(n => [n.identifier.toLowerCase(), n])), [model]);
   if (!text.trim()) return surface === "notebook" ? <div className="notebook-markdown is-empty"><p>Empty Markdown cell</p></div> : null;
@@ -82,8 +105,11 @@ function MarkdownView({ text, streaming = false, surface = "answer", namespace, 
       case "image": return <MarkdownImage key={key} source={n.url} alt={n.alt ?? ""} documentPath={documentPath} />;
       case "imageReference": { const d = definitions.get(n.identifier.toLowerCase()); return <MarkdownImage key={key} source={d?.url ?? ""} alt={n.alt ?? ""} documentPath={documentPath} />; }
       case "code": return <figure key={key} className="codeblock"><figcaption><span className="codeblock-lang">{n.lang || "code"}</span>
-        {surface === "answer" && n.lang?.toLowerCase() === "sql" && openSql && <button className="sql-promote-button" disabled={streaming} onClick={() => openSql(n.value)}>Open as query</button>}
-        <CopyButton text={n.value} label="Copy" title="Copy this code" /></figcaption><pre><code>{n.value}</code></pre></figure>;
+        <span className="codeblock-actions">
+          {surface === "answer" && insertCell && <InsertCellButton code={n.value} lang={n.lang ?? undefined} disabled={streaming} onInsert={insertCell} />}
+          {surface === "answer" && n.lang?.toLowerCase() === "sql" && openSql && <button className="sql-promote-button" disabled={streaming} onClick={() => openSql(n.value)}>Open as query</button>}
+          <CopyButton text={n.value} label="Copy" title="Copy this code" />
+        </span></figcaption><pre><code>{n.value}</code></pre></figure>;
       case "table": return <div key={key} className="markdown-table-scroll" role="region" aria-label="Markdown table" tabIndex={0}><table><thead><tr>{n.children[0]?.children.map((c, i) => <th key={i} scope="col" style={{ textAlign: n.align?.[i] ?? undefined }}>{c.children.map((x, j) => render(x as Nodes, `${key}-h${i}-${j}`))}</th>)}</tr></thead><tbody>{n.children.slice(1).map((row, i) => <tr key={i}>{n.children[0].children.map((_, j) => <td key={j} style={{ textAlign: n.align?.[j] ?? undefined }}>{row.children[j]?.children.map((c, k) => render(c as Nodes, `${key}-${i}-${j}-${k}`))}</td>)}</tr>)}</tbody></table></div>;
       case "html": return <span key={key} className="markdown-literal">{n.value}</span>;
       case "definition": return null;

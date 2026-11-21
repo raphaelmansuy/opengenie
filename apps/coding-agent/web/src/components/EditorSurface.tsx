@@ -14,8 +14,9 @@
  */
 import { reconcileIds } from "../domain/reconcile";
 import { Markdown } from "./Markdown";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
+import { RegisterNotebookInsert } from "./DocContext";
 import { askFence, saveDocument, type SaveResult } from "../api/save";
 import { runAffordance, runPlan, segments, type CellRun } from "../domain/cellrun";
 import { fallbackNotice, NO_SESSION, replacedNotice, withNotice, type SessionStatus } from "../domain/session";
@@ -25,7 +26,7 @@ import { WidgetBar } from "./WidgetBar";
 import { completeRun, recallRuns, rememberRuns, restore as restoreRuns, snapshot as snapshotRuns, type StoredRun } from "../domain/runstore";
 import { usePythonPolicy } from "../hooks/usePythonPolicy";
 import { NotebookBar } from "./NotebookBar";
-import { checkCells, parseCells, serializeCells, type Cell } from "../domain/notebook";
+import { checkCells, newCell, parseCells, serializeCells, type Cell } from "../domain/notebook";
 import { describeChanges, diffCells, sameCells } from "../domain/changes";
 import { checkPath, describeFence } from "../domain/fence";
 import { clear as clearDraft, read as readDraft, write as writeDraft } from "../domain/drafts";
@@ -82,12 +83,7 @@ export function EditorSurface({
   target, folder, sessionId, source, theme, onSaved, onCells, onAskCell, onPromptCell,
   onAskAction, onAttach, onOpenInDatabricks, onReload, onCopyLink, linkedCell, onDirtyChange,
 }: Props) {
-  useEffect(() => {
-    const w = window as unknown as { __m?: string[] };
-    w.__m = w.__m || [];
-    w.__m.push(`mount ${Math.random().toString(36).slice(2, 6)}`);
-    return () => { w.__m!.push(`unmount ${Math.random().toString(36).slice(2, 6)}`); };
-  }, []);
+  const registerInsert = useContext(RegisterNotebookInsert);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [fence, setFence] = useState(() => checkPath(folder, target.path));
@@ -303,6 +299,41 @@ export function EditorSurface({
    *  is then kept with the notebook instead of being handed to a component that is gone. */
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; flushRuns(); }; }, [flushRuns]);
+
+  // Register assistant code-block -> notebook cell bridge when a writable notebook is open (IMP-09).
+  useEffect(() => {
+    if (target.kind !== "notebook" || target.truncated) {
+      registerInsert(null);
+      return;
+    }
+    const insertFromChat = (code: string, fenceLang?: string): boolean => {
+      const normalized = (fenceLang ?? "").trim().toLowerCase();
+      const isMd = normalized === "md" || normalized === "markdown";
+      const langMap: Record<string, string> = {
+        python: "PYTHON",
+        py: "PYTHON",
+        pyspark: "PYTHON",
+        sql: "SQL",
+        sparksql: "SQL",
+        scala: "SCALA",
+        r: "R",
+      };
+      const cellLang = isMd ? "MARKDOWN" : (langMap[normalized] ?? target.language ?? "PYTHON");
+      const created = newCell(isMd ? "markdown" : "code", cellLang, code);
+      const next = [...liveRef.current, created];
+      setLiveCells(next);
+      liveRef.current = next;
+      text.current = serializeCells(next, target.language);
+      onCells(next);
+      setDirty(true);
+      dirtyRef.current = true;
+      writeDraft({ docId: target.path, text: text.current, basedOn: version.current ?? "", at: Date.now() });
+      setNotice({ tone: "ok", text: `Inserted cell ${next.length} into ${target.name}. Save when ready.` });
+      return true;
+    };
+    registerInsert(insertFromChat);
+    return () => registerInsert(null);
+  }, [registerInsert, target.kind, target.truncated, target.language, target.path, target.name, onCells]);
   const saveTimer = useRef<number | undefined>(undefined);
   /** A real lock, not a state read: two key events in one tick both see the old `saving` value. */
   const inFlight = useRef(false);

@@ -33,6 +33,7 @@ export function insertPrompt(after: number, instruction: string): string {
 }
 
 const MAX_ERROR = 1200;
+const MAX_DIAGNOSE_ERROR = 600;
 
 /** Keep the head of an error: the engine puts the cause first and a long search path after it. */
 export function clipError(error: string, max = MAX_ERROR): string {
@@ -40,9 +41,19 @@ export function clipError(error: string, max = MAX_ERROR): string {
   return e.length <= max ? e : `${e.slice(0, max).trimEnd()} …`;
 }
 
+/** Read-only root-cause explanation for a failed cell: never edits or executes code (IMP-08). */
+export function diagnosePrompt(n: number, error: string, category?: string): string {
+  const err = clipError(error, MAX_DIAGNOSE_ERROR);
+  const tag = category ? ` (${category})` : "";
+  const quote = err ? `\n\nThe engine said:\n${err.split("\n").map((l) => `> ${l}`).join("\n")}` : "";
+  return `Cell ${n} failed${tag}.${quote}\n\n`
+    + "Explain the root cause and the smallest likely fix in plain English. "
+    + "Do not modify any cell or run code.";
+}
+
 /** Diagnose and repair a failed cell, quoting the engine's own words so the agent starts from the cause. */
 export function fixPrompt(n: number, error: string): string {
-  const err = clipError(error);
+  const err = clipError(error, MAX_DIAGNOSE_ERROR);
   const quote = err ? `\n\nThe engine said:\n${err.split("\n").map((l) => `> ${l}`).join("\n")}` : "";
   return `Cell ${n} failed.${quote}\n\n`
     + "Find the cause (check the names it refers to against the real tables), fix this cell only, "

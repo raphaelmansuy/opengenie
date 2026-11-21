@@ -27,7 +27,7 @@ import { RunStatus } from "./RunStatus";
 import { StreamNotice } from "./StreamNotice";
 import { canSend as sendDecision } from "../domain/compose";
 import type { StreamState } from "../domain/stream";
-import { AgentMeter } from "./AgentMeter";
+import { AgentMeter, type CompactResult } from "./AgentMeter";
 import { Composer } from "./Composer";
 import { TurnView } from "./Transcript";
 import type { Doc } from "../domain/docs";
@@ -88,6 +88,8 @@ export interface DockProps {
   activeId?: string | null;
   onOpenSession?: (s: SessionSummary) => void;
   onDeleteSession?: (s: SessionSummary) => Promise<void>;
+  onCompact?: () => Promise<CompactResult | void>;
+  compactNotice?: { tone: "ok" | "info" | "error"; text: string } | null;
 }
 
 export function AssistantDock(p: DockProps) {
@@ -236,7 +238,7 @@ export function AssistantDock(p: DockProps) {
           <span className="dock-pin-was"> · the answer above came from {shortLabel(p.lastTurnModel)}</span>
         </p>
       )}
-      <PendingWork /><WorkComposerBar /><AgentMeter session={p.session} />
+      <PendingWork /><WorkComposerBar /><AgentMeter session={p.session} running={state === "streaming"} onCompact={p.onCompact} notice={p.compactNotice} />
       <Composer
         delivery={p.missionDelivery}
         onDeliveryDismiss={p.onDeliveryDismiss}
@@ -244,6 +246,7 @@ export function AssistantDock(p: DockProps) {
         blockedReason={decision.canSend ? null : decision.reason}
         busy={state === "streaming"}
         onSend={(text, mine = []) => p.onSend(text, [...p.attachments, ...mine])}
+        onCompact={p.onCompact}
         onStop={p.onStop}
         attachments={p.attachments}
         auto={null}

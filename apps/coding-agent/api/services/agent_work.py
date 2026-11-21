@@ -188,6 +188,22 @@ class AgentWork:
 
     async def observation_proof(self, sid, tid, related_change="", related_operation=""):
         calls = await self.evidence_calls(sid, tid)
+        # Pre-index completed invocations by asset key so verification runs in O(C + O + I)
+        # instead of O((C + O) * I).
+        read_obs_by_asset: dict[tuple, list[dict]] = {}
+        op_obs_by_asset: dict[tuple, list[dict]] = {}
+        for c in calls:
+            if c.get("state") != "completed":
+                continue
+            asset = c.get("asset")
+            if not isinstance(asset, dict):
+                continue
+            key = (asset.get("kind"), asset.get("id"))
+            tool = c.get("tool")
+            if tool in ("dbx_read", "dbx_describe", "dbx_operation"):
+                read_obs_by_asset.setdefault(key, []).append(c)
+            if tool == "dbx_operation" and c.get("effectState") == "succeeded":
+                op_obs_by_asset.setdefault(key, []).append(c)
         missing, effects = [], 0
         async for change in ledger_rows(self.store, "change", session_id=sid):
             if change.get("turnId") != tid and change["id"] != related_change:
@@ -202,13 +218,15 @@ class AgentWork:
             ):
                 continue
             effects += 1
+            asset = change["asset"]
+            key = (asset.get("kind"), asset.get("id"))
+            after = change.get("appliedAt", change["createdAt"])
+            expected_rev = change["newRevision"]
             matched = any(
-                c["state"] == "completed"
-                and c["asset"] == change["asset"]
-                and c["tool"] in ("dbx_read", "dbx_describe", "dbx_operation")
-                and c["createdAt"] > change.get("appliedAt", change["createdAt"])
-                and c.get("observedRevision") == change["newRevision"]
-                for c in calls
+                c["asset"] == asset
+                and c["createdAt"] > after
+                and c.get("observedRevision") == expected_rev
+                for c in read_obs_by_asset.get(key, ())
             )
             if matched and change["state"] == "applied":
                 await self.changes.mark_observed(change)
@@ -218,13 +236,12 @@ class AgentWork:
             if operation.get("turnId") != tid and operation["id"] != related_operation:
                 continue
             effects += 1
+            asset = operation["asset"]
+            key = (asset.get("kind"), asset.get("id"))
+            created = operation["createdAt"]
             matched = any(
-                c["tool"] == "dbx_operation"
-                and c["state"] == "completed"
-                and c.get("effectState") == "succeeded"
-                and c["asset"] == operation["asset"]
-                and c["createdAt"] >= operation["createdAt"]
-                for c in calls
+                c["asset"] == asset and c["createdAt"] >= created
+                for c in op_obs_by_asset.get(key, ())
             )
             if not matched:
                 missing.append("Observe successful operation " + operation["id"])

@@ -1,5 +1,6 @@
 import { useContext, useState } from "react";
 import { Context, SessionIdContext, request, type WorkRow } from "./model";
+import { DiffView } from "./DiffView";
 import { Status } from "./Status";
 export function ChangeCard({ row }: { row: WorkRow }) {
   const { busy, act } = useContext(Context);
@@ -27,7 +28,7 @@ export function ChangeCard({ row }: { row: WorkRow }) {
         </span>
       </header>
       <h3>{row.asset.id.split("/").at(-1) || row.asset.id}</h3>
-      <p className="work-path">{row.asset.id}</p>
+      <p className="work-path" title={row.asset.id}>{row.asset.id}</p>
       <dl className="work-facts">
         <div>
           <dt>Base revision</dt>
@@ -51,9 +52,7 @@ export function ChangeCard({ row }: { row: WorkRow }) {
       {row.diff && (
         <details open={row.state === "awaiting_review"}>
           <summary>Inspect proposed diff</summary>
-          <pre className="work-diff" tabIndex={0}>
-            {row.diff}
-          </pre>
+          <DiffView diff={row.diff} />
         </details>
       )}
       {row.reason && <p role="status">{row.reason}</p>}

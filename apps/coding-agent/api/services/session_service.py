@@ -620,9 +620,36 @@ class SessionService:
         plan = compaction.plan(turns, budget=window)
         if plan is None:
             return {"changed": False, "reason": "nothing needs shedding"}
-        await self._emit(session_compacted(session_id, plan.to_event(), summary=summary))
-        # The record is the deliverable: the summary text itself is produced by the caller (a model call)
-        # and stored as a projection field by the API that owns the transcript. Recording first means a
-        # compaction is never silent, even if the summariser fails afterwards.
-        live.extra["compacted"] = plan.to_event()
-        return {"changed": True, **plan.to_event()}
+        plan_payload = plan.to_event()
+        text_summary = summary.strip() if summary else ""
+        if not text_summary:
+            shed_ids = set(plan_payload["summarised"])
+            shed_turns = [t for t in live.state.turns if t.id in shed_ids]
+            snippets = [
+                f"Turn {t.index}: {(t.prompt or '').strip()[:72]}"
+                for t in shed_turns[:4]
+                if (t.prompt or "").strip()
+            ]
+            more = f" (+{len(shed_turns) - len(snippets)} more)" if len(shed_turns) > len(snippets) else ""
+            text_summary = (
+                f"Summarised {len(shed_ids)} middle turn(s) "
+                f"({plan_payload['tokensBefore']:,} -> {plan_payload['tokensAfter']:,} tokens)."
+                + (f" Covered: {'; '.join(snippets)}{more}." if snippets else "")
+            )
+        ev = session_compacted(session_id, plan_payload, summary=text_summary)
+        await self._emit(ev)
+        # The record is the deliverable: recording first guarantees compaction is never silent
+        # and gives the client a stable compactionId for idempotent replay.
+        live.extra["compacted"] = {
+            **plan_payload,
+            "compactionId": ev.payload["compactionId"],
+            "status": ev.payload["status"],
+            "summary": text_summary,
+        }
+        return {
+            "changed": True,
+            "compactionId": ev.payload["compactionId"],
+            "status": ev.payload["status"],
+            "summary": text_summary,
+            **plan_payload,
+        }

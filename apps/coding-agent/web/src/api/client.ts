@@ -321,7 +321,17 @@ export const api = {
   /** What this conversation may change ([R-9]) and what it spent ([R-24]). */
   budget: (id: string) => call<import("../domain/budget").BudgetState>(`/api/sessions/${id}/budget`),
   compact: (id: string) =>
-    call<Record<string, unknown>>(`/api/sessions/${id}/compact`, { method: "POST", headers: json }),
+    call<{
+      changed: boolean;
+      reason?: string;
+      compactionId?: string;
+      status?: string;
+      summary?: string;
+      kept?: string[];
+      summarised?: string[];
+      tokensBefore?: number;
+      tokensAfter?: number;
+    }>(`/api/sessions/${id}/compact`, { method: "POST", headers: json }),
   config: () =>
     call<{ writeModes: { id: string; label: string; sentence: string; mutates: boolean }[];
            defaultWriteMode: string }>("/api/config"),

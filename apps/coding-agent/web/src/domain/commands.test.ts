@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyCommand, commandAt, matchCommands, pushHistory, stepHistory } from "./commands";
+import { applyCommand, commandAt, isCompactCommand, matchCommands, pushHistory, stepHistory } from "./commands";
 
 describe("slash commands", () => {
   it("opens only when a command is being typed at the caret", () => {
@@ -20,6 +20,15 @@ describe("slash commands", () => {
     expect(r.text.startsWith("please Review the attached notebook")).toBe(true);
     expect(r.text.endsWith(" now")).toBe(true);
     expect(r.caret).toBe(r.text.indexOf(" now"));
+  });
+  it("exposes Databricks 2026 workflows and detects /compact case-insensitively (IMP-11, E24)", () => {
+    const names = matchCommands("").map((c) => c.name);
+    for (const cmd of ["/diagnose", "/review", "/lineage", "/pipeline", "/migrate", "/compact"]) {
+      expect(names).toContain(cmd);
+    }
+    expect(isCompactCommand("/compact")).toBe(true);
+    expect(isCompactCommand("  /COMPACT  ")).toBe(true);
+    expect(isCompactCommand("/compact extra")).toBe(false);
   });
 });
 
