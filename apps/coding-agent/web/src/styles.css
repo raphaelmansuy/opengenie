@@ -618,8 +618,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 .composer textarea {
   width: 100%; border: 0; outline: 0; resize: none; padding: 10px 14px; font: inherit;
+  line-height: 1.45;
   max-height: calc(1.55em * 8 + 20px); overflow-y: auto;
-  background: transparent; min-height: 56px; max-height: 200px;
+  background: transparent; min-height: 62px; max-height: 200px;
 }
 .composer-actions { display: flex; align-items: center; gap: 6px; padding: 0 10px 10px; }
 .composer-actions .primary, .composer-actions .stop { margin-left: 2px; }
@@ -3142,7 +3143,7 @@ a.account-item { text-decoration: none; color: var(--ink); }
   .edge-handles { display: none; }
   .composer.is-compact { padding: 6px 12px 8px; }
   .composer.is-compact textarea { min-height: 38px; max-height: 120px; padding: 8px 10px; }
-  .composer.is-compact:not(:focus-within):not([data-has-text=true]) textarea { max-height: 40px; }
+  .composer.is-compact:not(:focus-within):not([data-has-text=true]) textarea { max-height: 40px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .composer.is-compact .ctx-row.is-auto-only { display: none; }
   .composer.is-compact .composer-actions { padding: 0 6px 6px; gap: 3px; }
   .composer.is-compact .composer-actions .hint, .composer.is-compact .composer-actions > .primary kbd { display: none; }
@@ -3720,3 +3721,211 @@ a.account-item { text-decoration: none; color: var(--ink); }
 .widget-note { font-size: 11px; color: var(--ink-3); margin-left: auto; align-self: center; }
 .widget-reset { font: inherit; font-size: 11px; padding: 2px 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink-2); cursor: pointer; }
 .widget-reset:disabled { opacity: 0.45; cursor: default; }
+
+/* ---- Spec 017: Context meter, cell diagnostics, code-to-notebook & evidence pills ---- */
+.agent-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 14px;
+  font-size: 11px;
+  color: var(--ink-2);
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+.agent-meter-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+.agent-meter-pct {
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.agent-meter.is-elevated .agent-meter-pct { color: var(--yellow-800); }
+.agent-meter.is-critical .agent-meter-pct { color: var(--pink-700); }
+.agent-meter-bar {
+  width: 68px;
+  height: 7px;
+  accent-color: var(--blue-600);
+}
+.agent-meter-bar.is-elevated { accent-color: var(--yellow-800); }
+.agent-meter-bar.is-critical { accent-color: var(--pink-700); }
+.agent-meter-tokens {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.agent-meter-cache {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--green-100);
+  color: var(--green-700);
+  border: 1px solid var(--green-300);
+  white-space: nowrap;
+}
+.agent-meter-cost {
+  color: var(--ink-3);
+  margin-left: auto;
+  white-space: nowrap;
+}
+.agent-compact-btn {
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.agent-compact-btn:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+.agent-compact-btn.is-suggested {
+  background: var(--yellow-100);
+  border-color: var(--yellow-300);
+  color: var(--yellow-800);
+}
+.agent-compact-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.agent-meter-notice {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.agent-meter-notice.is-ok { color: var(--green-700); }
+.agent-meter-notice.is-info { color: var(--ink-2); }
+.agent-meter-notice.is-error { color: var(--pink-700); }
+
+/* Cell error classification pill + Diagnose error action (IMP-08) */
+.cell-error-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cell-error-pill.tone-warn {
+  background: var(--yellow-100);
+  color: var(--yellow-800);
+  border: 1px solid var(--yellow-300);
+}
+.cell-error-pill.tone-danger {
+  background: var(--pink-100);
+  color: var(--pink-700);
+  border: 1px solid var(--pink-300);
+}
+.cell-error-pill.tone-info {
+  background: var(--blue-100);
+  color: var(--blue-600);
+  border: 1px solid var(--blue-300);
+}
+.cell-diagnose {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cell-diagnose:hover {
+  background: var(--surface-3);
+}
+
+/* Assistant code block actions (IMP-09) */
+.codeblock-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.code-insert-button {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--blue-300);
+  background: var(--blue-50, var(--blue-100));
+  color: var(--blue-600);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.code-insert-button:hover:not(:disabled) {
+  background: var(--blue-100);
+}
+.code-insert-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Evidence grade pills (IMP-12) */
+.ev-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.ev-reason {
+  font-size: 11px;
+  color: var(--pink-700);
+  line-height: 1.4;
+}
+.ev-grade {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  flex: none;
+}
+.ev-grade.is-verified {
+  background: var(--green-100);
+  color: var(--green-700);
+  border: 1px solid var(--green-300);
+}
+.ev-grade.is-supported {
+  background: var(--blue-100);
+  color: var(--blue-600);
+  border: 1px solid var(--blue-300);
+}
+.ev-grade.is-unverified {
+  background: var(--yellow-100);
+  color: var(--yellow-800);
+  border: 1px solid var(--yellow-300);
+}
+.ev-grade.is-contradicted {
+  background: var(--pink-100);
+  color: var(--pink-700);
+  border: 1px solid var(--pink-300);
+}
+.mission-proof-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}

@@ -12,9 +12,10 @@ import type { Turn } from "./events";
 
 export interface FollowUp { label: string; prompt: string }
 
-const WROTE = /write_(notebook|file)/;
-const RAN_NOTEBOOK = /run_notebook/;
-const SQL = /(run_sql|sql|query)/;
+const WROTE = /(?:write_(?:notebook|file)|dbx_(?:edit|create|define))/;
+const RAN_NOTEBOOK = /(?:run_notebook|dbx_run(?!_sql)|dbx_operation)/;
+const SQL = /(?:dbx_run_sql|run_sql|sql|query)/;
+const INSPECTED = /(?:dbx_(?:read|describe|list|search|discover)|describe_table|list_tables)/;
 
 const ok = (t: Turn, re: RegExp) => t.tools.some((c) => re.test(c.name) && c.status === "completed");
 const failed = (t: Turn) => t.tools.some((c) => c.status === "error");
@@ -26,6 +27,7 @@ export function followUps(turn: Turn | undefined | null, max = 3): FollowUp[] {
 
   const wrote = ok(turn, WROTE);
   const ran = ok(turn, RAN_NOTEBOOK);
+  const inspected = ok(turn, INSPECTED);
   const hasRows = turn.tools.some((c) => c.table && c.table.rows.length > 0);
 
   if (failed(turn)) {
@@ -44,6 +46,10 @@ export function followUps(turn: Turn | undefined | null, max = 3): FollowUp[] {
     add("Show me the SQL", "Show me the exact SQL you ran, and what each clause is for.");
   }
   if (wrote) add("Add a chart", "Add a cell that charts the result, with a markdown cell explaining it.");
+  if (inspected && !wrote && !hasRows) {
+    add("Profile data quality", "Profile the table you inspected: row count, null rates, and numeric ranges.");
+    add("Write a starter notebook", "Create a clean starter notebook in our working folder exploring the asset you just inspected.");
+  }
   if (out.length === 0) {
     add("Summarise what you did", "Summarise what you did in this conversation in five lines or fewer.");
     add("What should I check next?", "What should I double-check next, and why?");

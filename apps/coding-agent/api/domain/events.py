@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal
+import uuid
 
 EventType = Literal[
     "question.requested",
@@ -253,14 +254,22 @@ def usage_updated(sid: str, tid: str, usage: dict) -> Event:
     return Event(sid, "usage.updated", {"usage": usage}, turn_id=tid, actor="agent")
 
 
-def session_compacted(sid: str, plan: dict, *, summary: str = "") -> Event:
-    """History was summarised. `[R-11]`, `[F-10]`: this type existed for months and was emitted by nobody.
+def session_compacted(
+    sid: str, plan: dict, *, summary: str = "", compaction_id: str | None = None
+) -> Event:
+    """History was summarised. `[R-11]`, `[F-10]`, `[IMP-03]`.
 
-    The payload carries what was kept, what was replaced, and both token counts, so a reader of the
-    transcript a week later can see that turns 2–8 became a summary and how much that saved. A
-    compaction nobody can audit is indistinguishable from lost history.
+    The payload carries what was kept, what was replaced, both token counts, and a stable
+    `compactionId` + `status` so both the durable journal and the live front-end `AgentUpdates`
+    projection render every compaction without silent drops.
     """
-    return Event(sid, "session.compacted", {**plan, "summary": summary}, actor="app")
+    cid = compaction_id or f"cmp_{uuid.uuid4().hex[:12]}"
+    return Event(
+        sid,
+        "session.compacted",
+        {**plan, "compactionId": cid, "status": "completed", "summary": summary},
+        actor="app",
+    )
 
 
 def document_saved(sid: str, path: str, size: int, *, by: str, actor: str = "app") -> Event:

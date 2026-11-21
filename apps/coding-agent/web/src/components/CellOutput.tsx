@@ -9,6 +9,7 @@
  * is drawn from `domain/cellrun`, so the words and the tone are testable without a DOM.
  */
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { classifyCellError } from "../domain/cellerror";
 import {
   badge, drawn, numericColumns, presentRows, showsMessage, summary, toTsv, truncationNote, typeGlyph, whenRan,
   type CellRun, type Output,
@@ -171,8 +172,8 @@ function HtmlOutput({ html }: { html: string }) {
   );
 }
 
-export function CellOutput({ run, onClear, onFix, folded: foldedProp, onToggleFold, onView }: {
-  run: CellRun; onClear: () => void; onFix?: () => void;
+export function CellOutput({ run, onClear, onFix, onDiagnose, folded: foldedProp, onToggleFold, onView }: {
+  run: CellRun; onClear: () => void; onFix?: () => void; onDiagnose?: (categoryLabel: string) => void;
   /** The person switched a result table between table and chart, or changed the chart. Kept with the run. */
   onView?: (table: number, view: TableView) => void;
   /** When set, the parent owns the fold (command-mode O and this chevron are the same control). */
@@ -180,6 +181,7 @@ export function CellOutput({ run, onClear, onFix, folded: foldedProp, onToggleFo
   onToggleFold?: () => void;
 }) {
   const b = badge(run);
+  const errClass = run.state === "failed" ? classifyCellError(run.error) : null;
   const [localFold, setLocalFold] = useState(false);
   const folded = foldedProp ?? localFold;
   const toggleFold = () => (onToggleFold ? onToggleFold() : setLocalFold((f) => !f));
@@ -199,13 +201,26 @@ export function CellOutput({ run, onClear, onFix, folded: foldedProp, onToggleFo
             : <Alert size={11} />}
           {b.word}
         </span>
+        {errClass && (
+          <span className={`cell-error-pill tone-${errClass.tone}`} title={`Detected category: ${errClass.label}`}>
+            {errClass.label}
+          </span>
+        )}
         {/* A run in flight has no duration yet: "0ms" beside "running" reads as a frozen counter. */}
         {run.state !== "running" && <span className="cell-output-when">{summary(run)}</span>}
         {ran && <span className="cell-output-by" title={run.finishedAt}>{ran}</span>}
         {run.warehouse && <span className="cell-output-where" title={`Ran on ${run.warehouse}`}>{run.warehouse}</span>}
         <span className="cell-output-spacer" />
-        {/* The one action a failure needs. It sends the engine's own words with the cell, so the
-            agent starts from the cause instead of asking for it. */}
+        {/* Separate read-only diagnosis from cell-editing repair (IMP-08). */}
+        {run.state === "failed" && onDiagnose && (
+          <button
+            className="cell-diagnose"
+            onClick={() => onDiagnose(errClass?.label ?? "Execution error")}
+            title="Explain the root cause without modifying code"
+          >
+            Diagnose error
+          </button>
+        )}
         {run.state === "failed" && onFix && (
           <button className="cell-fix" onClick={onFix} title="Send this error to the agent and ask for a fix">
             <Sparkle size={11} /> Fix with agent

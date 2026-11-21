@@ -10,3 +10,11 @@ export const OpenDoc = createContext<(doc: Doc) => void>(() => {});
 
 /** Explicit SQL promotion from an assistant code block; never executes the proposal. */
 export const OpenSqlQuery = createContext<((text: string) => void) | null>(null);
+
+/** Appends a code snippet from an assistant reply as a new cell into the active writable notebook (IMP-09). */
+export const InsertNotebookCell = createContext<((code: string, language?: string) => boolean) | null>(null);
+
+/** Allows EditorSurface to register/unregister its writable notebook cell inserter without prop-drilling. */
+export const RegisterNotebookInsert = createContext<(fn: ((code: string, language?: string) => boolean) | null) => void>(
+  () => {},
+);

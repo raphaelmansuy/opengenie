@@ -8,18 +8,29 @@ export interface Command { name: string; hint: string; insert: string; source?: 
 
 export const COMMANDS: Command[] = [
   { name: "/explain", hint: "what the open notebook does, cell by cell", insert: "Explain the attached notebook, cell by cell, in plain English. Do not change anything." },
+  { name: "/diagnose", hint: "root-cause an error without modifying code", insert: "Diagnose the error in the attached notebook or query. Explain the root cause and smallest likely fix in plain English without modifying any file or running code." },
   { name: "/fix", hint: "find bugs, propose focused changes, prove it", insert: "Review the attached notebook for bugs. Check every table and column name first, read the base revision and propose focused cell operations, run it, and show the evidence." },
+  { name: "/review", hint: "PR-style code review for correctness and UC safety", insert: "Perform a strict code review of the attached notebook: verify table and column names against Unity Catalog, check for silent nulls, shuffle skew, and security issues. Do not edit yet." },
   { name: "/chart", hint: "aggregate, plot, and write the summary", insert: "Build a notebook that aggregates the data and draws a chart, with one markdown cell explaining what it shows. Check the column names before writing." },
   { name: "/sql", hint: "answer a question with SQL, show the rows", insert: "Answer this question with SQL: " },
   { name: "/document", hint: "add grounded comments to tables", insert: "Document the tables in the attached context: for each one, a short comment grounded in the real values you sample. Do not change data." },
   { name: "/profile", hint: "row count, nulls, ranges, surprises", insert: "Profile the attached table: row count, null rates, the range of each numeric column, and anything surprising. Show the numbers." },
+  { name: "/lineage", hint: "trace upstream sources and downstream consumers", insert: "Trace the upstream sources and downstream consumers of the attached table or notebook using Unity Catalog metadata, and list every dependency clearly." },
+  { name: "/pipeline", hint: "scaffold a Lakeflow / Delta Live Tables pipeline", insert: "Design a Lakeflow Spark Declarative Pipeline (bronze -> silver -> gold) for the attached tables with data quality expectations and schema checks, inside our working folder." },
+  { name: "/migrate", hint: "modernise legacy Spark / Hive SQL to Databricks SQL", insert: "Review the attached code for legacy Hive/Spark 2 patterns and propose focused cell edits to modernise it for Databricks Runtime & Unity Catalog without changing output." },
   { name: "/optimize", hint: "make it faster, prove the result is the same", insert: "Review the attached notebook for slow or wasteful steps. Make the smallest changes that speed it up, propose focused cell operations against the base revision, and show that the output is unchanged." },
   { name: "/prettify", hint: "format and name things clearly", insert: "Tidy the attached notebook: consistent formatting, clear names, one idea per cell, a short markdown heading for each section. Do not change what it computes. Propose focused cell operations against the base revision." },
   { name: "/rename", hint: "better names for variables and columns", insert: "Suggest clearer names for the variables, aliases and columns in the attached notebook, propose cell operations against the base revision, and list every rename you made." },
   { name: "/findtables", hint: "find tables that match what you describe", insert: "Find tables in Unity Catalog that match this description, and for each give its full name and one line on why it fits: " },
   { name: "/test", hint: "add checks that would catch a regression", insert: "Propose focused cell operations against the base revision to add checks to the attached notebook that would catch a wrong result (row counts, nulls, ranges, a known value), run them, and show the results." },
+  { name: "/compact", hint: "summarise middle turns to reclaim context window", insert: "/compact" },
   { name: "/help", hint: "what this agent can do", insert: "What can you do here, in two short paragraphs, and what are your limits?" },
 ];
+
+/** True when the user submits the direct `/compact` action command (case-insensitive, E24). */
+export function isCompactCommand(text: string): boolean {
+  return /^\/compact$/i.test(text.trim());
+}
 
 const SLASH = /(^|\s)\/([a-z]*)$/;
 

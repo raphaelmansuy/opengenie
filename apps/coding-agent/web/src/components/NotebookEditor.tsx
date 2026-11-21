@@ -15,7 +15,7 @@ import {
 import { ChevronDown, ChevronRight, Close, LinkIcon, Play, Plus, Sparkle } from "./Icons";
 import { CellInsert } from "./CellInsert";
 import { CellPrompt } from "./CellPrompt";
-import { editPrompt, fixPrompt, insertPrompt } from "../domain/cellprompt";
+import { diagnosePrompt, editPrompt, fixPrompt, insertPrompt } from "../domain/cellprompt";
 import { runAffordance, spanIds, type CellRun, type PythonPolicy } from "../domain/cellrun";
 import { CellOutput } from "./CellOutput";
 import { Editor } from "../editor/Editor";
@@ -408,7 +408,7 @@ export function NotebookEditor({
     )
   );
 
-  const map = executionMap(cells, runs ?? {}, runnable, batch);
+  const map = useMemo(() => executionMap(cells, runs ?? {}, runnable, batch), [cells, runs, runnable, batch]);
 
   return (
     <div className="nb-stage">
@@ -480,6 +480,7 @@ export function NotebookEditor({
             onPrompt?.({ cell: i + 1, text: editPrompt(i + 1, instruction) });
           }}
           onFix={onPrompt ? (error) => onPrompt({ cell: i + 1, text: fixPrompt(i + 1, error) }) : undefined}
+          onDiagnose={onPrompt ? (error, category) => onPrompt({ cell: i + 1, text: diagnosePrompt(i + 1, error, category) }) : undefined}
           onSave={() => onSave?.()}
           run={runs?.[cell.id]}
           canRun={Boolean(onRunCell)}
@@ -542,6 +543,7 @@ interface CellProps {
   onDiscuss?: () => void;
   onPromptSend: (instruction: string) => void;
   onFix?: (error: string) => void;
+  onDiagnose?: (error: string, category: string) => void;
   onSave: () => void;
   run?: CellRun;
   canRun: boolean;
@@ -776,6 +778,7 @@ function CellBlock(p: CellProps) {
         {p.run && !collapsed && (
           <div className="cell-output-wrap">
             <CellOutput run={p.run} onClear={p.onClearRun} onView={p.onRunView} folded={p.outputHidden} onToggleFold={p.onToggleOutput}
+              onDiagnose={p.onDiagnose && p.run.error ? (cat) => p.onDiagnose?.(p.run?.error ?? "", cat) : undefined}
               onFix={p.onFix && p.run.error ? () => p.onFix?.(p.run?.error ?? "") : undefined} />
           </div>
         )}

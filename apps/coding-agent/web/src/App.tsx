@@ -13,7 +13,7 @@ import { api, type CatalogueResponse, type SessionSummary } from "./api/client";
 import { queries } from "./api/queries";
 const QueryLibrary = lazy(() => import("./components/QueryLibrary").then(m => ({ default: m.QueryLibrary })));
 const QueryEditor = lazy(() => import("./components/QueryEditor").then(m => ({ default: m.QueryEditor })));
-import { OpenSqlQuery } from "./components/DocContext";
+import { InsertNotebookCell, OpenDoc, OpenSqlQuery, RegisterNotebookInsert, WorkspaceLinks } from "./components/DocContext";
 import type { SqlQuery } from "./domain/query";
 import "./sql.css";
 import { prettyId } from "./domain/models";
@@ -48,7 +48,6 @@ import { RunsPage } from "./components/RunsPage";
 import { PipelinePage } from "./components/PipelinePage";
 import { FilesPane } from "./components/FilesPane";
 import { Composer } from "./components/Composer";
-import { OpenDoc, WorkspaceLinks } from "./components/DocContext";
 import type { Workspace } from "./domain/links";
 import { NotebookViewer, TableViewer } from "./components/Viewer";
 import type { WsNode } from "./components/WorkspaceTree";
@@ -462,26 +461,57 @@ export function App() {
   const addContext = useCallback((a: Attachment) => setAttachments((cur) => dedupe([...cur, a])), []);
 
   const seen = useRef(new Set<string>());
+  const settledTurns = useRef(new Set<string>());
   useEffect(() => {
     const written: Doc[] = [];
-    for (const t of session.turns) for (const c of t.tools) {
-      if (c.status !== "completed" || seen.current.has(c.callId)) continue;
-      seen.current.add(c.callId);
-      const wroteTables = tablesWritten(c.name, c.args);
-      if (wroteTables.length) {
-        // A table open on screen is stale after the agent changes it: refresh it, same as a notebook.
-        setDocs((cur) => cur.map((d) => (d.kind === "table" && wroteTables.some((t) => d.ref.toLowerCase() === t || d.ref.toLowerCase().endsWith(`.${t}`))
-          ? { ...d, rev: d.rev + 1 } : d)));
+    for (const t of session.turns) {
+      if (settledTurns.current.has(t.id)) continue;
+      for (const c of t.tools) {
+        if (c.status !== "completed" || seen.current.has(c.callId)) continue;
+        seen.current.add(c.callId);
+        const wroteTables = tablesWritten(c.name, c.args);
+        if (wroteTables.length) {
+          // A table open on screen is stale after the agent changes it: refresh it, same as a notebook.
+          setDocs((cur) => cur.map((d) => (d.kind === "table" && wroteTables.some((tb) => d.ref.toLowerCase() === tb || d.ref.toLowerCase().endsWith(`.${tb}`))
+            ? { ...d, rev: d.rev + 1 } : d)));
+        }
+        const hit = touched(c.name, c.args, c.summary);
+        if (hit?.mutates) written.push(hit.doc);
       }
-      const hit = touched(c.name, c.args, c.summary);
-      if (hit?.mutates) written.push(hit.doc);
+      if (!["running", "auditing", "queued"].includes(t.status)) {
+        settledTurns.current.add(t.id);
+      }
     }
     if (!written.length) return;
     setTreeRev((n) => n + 1);
     setDocs((cur) => cur.map((d) => (written.some((w) => w.id === d.id) ? { ...d, rev: d.rev + 1 } : d)));
     // Spec 011: refresh open results, but keep the reader on their mission until they choose Open.
   }, [session.turns]);
-  useEffect(() => { seen.current = new Set(); }, [active]);
+  useEffect(() => { seen.current = new Set(); settledTurns.current = new Set(); }, [active]);
+
+  // Writable notebook cell inserter registered by EditorSurface when a notebook is open (IMP-09).
+  const [insertNotebookCell, setInsertNotebookCell] = useState<((code: string, lang?: string) => boolean) | null>(null);
+  const registerNotebookInsert = useCallback((fn: ((code: string, lang?: string) => boolean) | null) => {
+    setInsertNotebookCell(() => fn);
+  }, []);
+
+  // Context compaction action wired to AgentMeter button and `/compact` command (IMP-05).
+  const [compactNotice, setCompactNotice] = useState<{ tone: "ok" | "info" | "error"; text: string } | null>(null);
+  useEffect(() => { setCompactNotice(null); }, [active]);
+  const compactSession = useCallback(async () => {
+    if (!active) return { changed: false, reason: "no active session" };
+    const res = await api.compact(active);
+    if (res.changed) {
+      const n = Array.isArray(res.summarised) ? res.summarised.length : 0;
+      setCompactNotice({
+        tone: "ok",
+        text: n > 0 ? `Compacted ${n} turn${n === 1 ? "" : "s"}` : "Context compacted",
+      });
+    } else {
+      setCompactNotice({ tone: "info", text: "Already compact — nothing needed shedding." });
+    }
+    return res;
+  }, [active]);
 
   // Ledger events are authoritative for facade writes; ACP summaries can be missing or truncated.
   const seenAssetChanges = useRef(new Set<string>());
@@ -1051,6 +1081,8 @@ export function App() {
       activeId={active}
       onOpenSession={(x) => { setActive(x.id); setView(CHAT); setFocus(withoutDoc()); }}
       onDeleteSession={deleteSession}
+      onCompact={active ? compactSession : undefined}
+      compactNotice={compactNotice}
       modelSlot={modelControl("inline")}
       placeholder={focus.doc ? `Ask about ${focus.doc.name}…` : undefined}
     />
@@ -1060,6 +1092,8 @@ export function App() {
     <AgentWorkProvider session={session} onAttach={asset => { addContext(asset); reveal(); }}><SessionIdContext.Provider value={session.id}><WorkspaceLinks.Provider value={workspace}>
       <OpenDoc.Provider value={openDoc}>
       <OpenSqlQuery.Provider value={text => void openSql(text)}>
+      <InsertNotebookCell.Provider value={insertNotebookCell}>
+      <RegisterNotebookInsert.Provider value={registerNotebookInsert}>
         {/* `--dock-w` lives on `.app` because a drawer is rendered as a SIBLING of `.layout`, not inside
             it. It is the dock's own width, so the inspector drawer can open to its left instead of on
             top of it: the facts must never cover the conversation they describe (007 ZN-2). */}
@@ -1254,7 +1288,7 @@ export function App() {
                 delivery={missionDelivery}
                 onDeliveryDismiss={() => setMissionDelivery(null)}
                 inputRef={composerBox}
-                blockedReason={sendDecision.canSend ? null : sendDecision.reason} busy={busy} onSend={message} onStop={stop}
+                blockedReason={sendDecision.canSend ? null : sendDecision.reason} busy={busy} onSend={message} onCompact={active ? compactSession : undefined} onStop={stop}
                 attachments={attachments} auto={viewDoc ? asAttachment(viewDoc) : null}
                 onAdd={addContext} onRemove={(a) => setAttachments((cur) => cur.filter((x) => x !== a))}
                 openDocs={docs}
@@ -1341,6 +1375,8 @@ export function App() {
 
 
         </div>
+      </RegisterNotebookInsert.Provider>
+      </InsertNotebookCell.Provider>
       </OpenSqlQuery.Provider>
       </OpenDoc.Provider>
     </WorkspaceLinks.Provider></SessionIdContext.Provider></AgentWorkProvider>

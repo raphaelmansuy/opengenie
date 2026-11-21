@@ -373,26 +373,37 @@ class TurnService:
                     },
                 )
             if item.type == "approval.requested":
-                live.extra.setdefault("approvals", {})[item.payload["approvalId"]] = item.payload
+                aid = item.payload["approvalId"]
+                live.extra.setdefault("approvals", {})[aid] = item.payload
+                cid = item.payload.get("callId")
+                if cid:
+                    live.extra.setdefault("approvals_by_call", {}).setdefault(cid, []).append(aid)
             if item.type == "tool_call.updated" and item.payload.get("rawInput"):
                 raw = item.payload["rawInput"]
                 if isinstance(raw, dict):
-                    for request in list(live.extra.get("approvals", {}).values()):
-                        if request.get("callId") == item.payload["callId"]:
-                            request.update(
-                                input=raw,
-                                argumentsKnown=True,
-                                target=str(
-                                    next(
-                                        (
-                                            raw[k]
-                                            for k in ("path", "id", "full_name", "name", "sql")
-                                            if raw.get(k)
-                                        ),
-                                        "Tool input",
-                                    )
-                                ),
-                            )
+                    call_id = item.payload.get("callId")
+                    approvals = live.extra.get("approvals", {})
+                    indexed_ids = live.extra.get("approvals_by_call", {}).get(call_id, ())
+                    candidates = (
+                        [approvals[a] for a in indexed_ids if a in approvals]
+                        if indexed_ids
+                        else [r for r in approvals.values() if r.get("callId") == call_id]
+                    )
+                    for request in candidates:
+                        request.update(
+                            input=raw,
+                            argumentsKnown=True,
+                            target=str(
+                                next(
+                                    (
+                                        raw[k]
+                                        for k in ("path", "id", "full_name", "name", "sql")
+                                        if raw.get(k)
+                                    ),
+                                    "Tool input",
+                                )
+                            ),
+                        )
             if self.work:
                 if item.type == "usage.updated":
                     item = dataclasses.replace(
@@ -406,12 +417,16 @@ class TurnService:
                 if item.type == "approval.requested":
                     await self._link_native_proposal(live, item.turn_id, item.payload)
                 elif item.type == "tool_call.updated" and item.payload.get("rawInput"):
-                    for request in list(live.extra.get("approvals", {}).values()):
-                        if (
-                            request.get("callId") == item.payload["callId"]
-                            and not request.get("changeId")
-                            and not request.get("runReviewId")
-                        ):
+                    call_id = item.payload.get("callId")
+                    approvals = live.extra.get("approvals", {})
+                    indexed_ids = live.extra.get("approvals_by_call", {}).get(call_id, ())
+                    candidates = (
+                        [approvals[a] for a in indexed_ids if a in approvals]
+                        if indexed_ids
+                        else [r for r in approvals.values() if r.get("callId") == call_id]
+                    )
+                    for request in candidates:
+                        if not request.get("changeId") and not request.get("runReviewId"):
                             await self._link_native_proposal(live, item.turn_id, request)
             await self._emit(item)
             for request in list(live.extra.get("approvals", {}).values()):
@@ -419,6 +434,13 @@ class TurnService:
                 if invalid and hasattr(self._rt, "fail_permission"):
                     await self._rt.fail_permission(live.handle, request["approvalId"], invalid)
                     live.extra["approvals"].pop(request["approvalId"], None)
+                    cid = request.get("callId")
+                    if cid and cid in live.extra.get("approvals_by_call", {}):
+                        live.extra["approvals_by_call"][cid] = [
+                            a for a in live.extra["approvals_by_call"][cid] if a != request["approvalId"]
+                        ]
+                        if not live.extra["approvals_by_call"][cid]:
+                            live.extra["approvals_by_call"].pop(cid, None)
                     await self._emit(
                         approval_decided(
                             live.state.session.id, item.turn_id, request["approvalId"], "invalid", "app"
@@ -458,6 +480,7 @@ class TurnService:
         for aid in list(live.extra.get("approvals", {})):
             del live.extra["approvals"][aid]
             await self._emit(approval_decided(sid, None, aid, state, "app"))
+        live.extra.pop("approvals_by_call", None)
         for question in live.extra.get("questions", {}).values():
             if question.get("state") == "pending":
                 question["state"] = state
@@ -780,6 +803,12 @@ class TurnService:
                         )
                     )
             del pending[approval_id]
+            cid = request.get("callId")
+            by_call = live.extra.get("approvals_by_call")
+            if cid and by_call and cid in by_call:
+                by_call[cid] = [a for a in by_call[cid] if a != approval_id]
+                if not by_call[cid]:
+                    by_call.pop(cid, None)
             turn = live.state.running()
             await self._emit(
                 approval_decided(session_id, turn.id if turn else None, approval_id, outcome, user_id)

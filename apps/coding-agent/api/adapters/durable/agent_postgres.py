@@ -148,16 +148,20 @@ class PostgresAgentLedgers:
 
     @_reader
     async def storage(self, conn, sid):
+        # Single UNION ALL round-trip across all static allow-listed ledger tables (IMP-16).
+        union_sql = " UNION ALL ".join(
+            f"SELECT %s AS kind, COUNT(*) AS rows, COALESCE(SUM(octet_length(body)), 0) AS bytes "
+            f"FROM {table(kind)} WHERE session_id=%s"
+            for kind in KINDS
+        )
+        params = [val for kind in KINDS for val in (kind, sid)]
         async with conn.transaction():
             async with conn.cursor() as cur:
-                result = {}
-                for kind in KINDS:
-                    await cur.execute(
-                        f"SELECT COUNT(*),COALESCE(SUM(octet_length(body)),0) FROM {table(kind)} WHERE session_id=%s",
-                        (sid,),
-                    )
-                    count, size = await cur.fetchone()
-                    result[kind] = {"rows": count, "payloadBytes": size}
+                await cur.execute(union_sql, params)
+                rows = await cur.fetchall()
+                result = {kind: {"rows": 0, "payloadBytes": 0} for kind in KINDS}
+                for kind, count, size in rows:
+                    result[kind] = {"rows": int(count), "payloadBytes": int(size)}
                 return result
 
     async def purge_session(self, journal, sid):

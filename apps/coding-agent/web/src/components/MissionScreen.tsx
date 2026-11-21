@@ -1,6 +1,6 @@
 import { WORK_TABS, WorkPanel, type WorkTab } from "./AgentWork";
 /** Mission is a read model of a turn, never a second execution or persistence path. Spec 011. */
-import { useId, useRef, useState, type KeyboardEvent } from "react";
+import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { SessionView } from "../domain/events";
 import type { Doc } from "../domain/docs";
 import { currentMission, lastAchieved, missionView, type MissionProof } from "../domain/mission";
@@ -29,11 +29,19 @@ interface Props {
 
 function Proof({ proof }: { proof: MissionProof }) {
   const { row, source, verified } = proof;
-  return <details className={`mission-proof${verified ? " is-verified" : ""}`}>
+  const grade = (row.grade || (verified ? "verified" : "unverified")).toLowerCase();
+  const gradeLabel = grade[0].toUpperCase() + grade.slice(1);
+  return <details className={`mission-proof${verified ? " is-verified" : ""} is-grade-${grade}`}>
     <summary>
       <span className="mission-proof-mark" aria-hidden>{verified ? <Check size={14} /> : <Alert size={14} />}</span>
-      <span className="mission-proof-text"><strong>{row.requirement || "Unnamed requirement"}</strong>
-        <small>{row.grade ? row.grade[0].toUpperCase() + row.grade.slice(1) : verified ? "Verified" : "Not verified"} <span aria-hidden>·</span> Inspect source</small></span>
+      <span className="mission-proof-text">
+        <span className="mission-proof-title-row">
+          <strong>{row.requirement || "Unnamed requirement"}</strong>
+          <span className={`ev-grade is-${grade}`}>{gradeLabel}</span>
+        </span>
+        {row.reason && (grade === "contradicted" || !verified) && <small className="ev-reason">{row.reason}</small>}
+        <small>{row.tool ? `${row.tool} · ` : ""}Inspect source</small>
+      </span>
       <ArrowUpRight size={13} />
     </summary>
     <div className="mission-proof-source">
@@ -93,6 +101,17 @@ export function MissionScreen({ session, conn, dockVisible, error, onOpen, onCho
   const current = currentMission(session);
   const turn = session.turns.find((t) => t.id === selected) ?? current;
   const v = missionView(session, turn, conn);
+  const turnStatusKey = session.turns.map((t) => `${t.id}:${t.status}`).join("|");
+  const turnOptions = useMemo(
+    () =>
+      [...session.turns].reverse().map((t) => ({
+        id: t.id,
+        label: `Mission ${t.index} · ${missionView(session, t, conn).label}${t.id === current?.id ? " · Current" : ""}`,
+      })),
+    // Recompute picker labels only when turn list/statuses or connection state change, not on every text delta (IMP-17).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [turnStatusKey, conn.kind, current?.id, session.approvals.length],
+  );
   const achieved = lastAchieved(session);
   const completed = [...session.turns].reverse().find((t) => t.status === "completed");
   const previous = achieved ?? completed;
@@ -141,7 +160,7 @@ export function MissionScreen({ session, conn, dockVisible, error, onOpen, onCho
           <label className="mission-picker"><span className="sr-only">Choose mission</span><select value={turn?.id ?? ""} disabled={!session.turns.length}
             onChange={(e) => choose(e.target.value === current?.id ? null : e.target.value)}>
             {!session.turns.length && <option value="">Awaiting first mission</option>}
-            {[...session.turns].reverse().map((t) => <option key={t.id} value={t.id}>Mission {t.index} · {missionView(session, t, conn).label}{t.id === current?.id ? " · Current" : ""}</option>)}
+            {turnOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
           </select><ChevronDown size={14} /></label>
           {!v.isCurrent ? <button type="button" className="btn ghost" onClick={() => choose(null)}>Return to current mission</button>
             : previous && previous.id !== turn?.id && <button type="button" className="btn ghost" onClick={() => choose(previous.id)}>{achieved ? "Last achieved" : "Last completed"}<ArrowUpRight size={12} /></button>}

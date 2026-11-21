@@ -50,4 +50,14 @@ describe("follow-ups", () => {
     expect(new Set(f.map((x) => x.label)).size).toBe(f.length);
     for (const x of f) expect(x.prompt.endsWith(".")).toBe(true);
   });
+
+  it("recognizes V2 facade tools (dbx_edit, dbx_create, dbx_run, dbx_describe) (IMP-10, E23)", () => {
+    const edited = followUps(turn({ tools: [tool("dbx_edit")] }));
+    expect(edited[0].label).toBe("Run it and show the result");
+    const editedAndRan = followUps(turn({ tools: [tool("dbx_edit"), tool("dbx_run")] }));
+    expect(editedAndRan.map((x) => x.label)).not.toContain("Run it and show the result");
+    expect(editedAndRan[0].label).toBe("Explain what it does");
+    const described = followUps(turn({ tools: [tool("dbx_describe")] }));
+    expect(described[0].label).toBe("Profile data quality");
+  });
 });
