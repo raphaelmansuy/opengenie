@@ -56,12 +56,18 @@ APP_SP="$(printf '%s' "$APP_JSON" | python3 -c 'import json,sys;print(json.load(
 [ -n "$APP_SP" ] || die "app '$APP_NAME' has no service principal client id"
 echo "  service principal $APP_SP"
 
-# A Postgres role backed by the service principal. `--replace-existing` makes a re-run a no-op
-# rather than an error, so this script can be run on every deploy.
-databricks postgres create-role "projects/${DEPLOY_LAKEBASE_PROJECT}/branches/${DEPLOY_LAKEBASE_BRANCH}" \
-  --role-id "${APP_NAME}-sp" --replace-existing \
+# A Postgres role backed by the service principal. The current CLI has no
+# `--replace-existing`; a role that is already there is the success case, so a
+# re-run of this script can continue.
+role_out="$(databricks postgres create-role "projects/${DEPLOY_LAKEBASE_PROJECT}/branches/${DEPLOY_LAKEBASE_BRANCH}" \
+  --role-id "${APP_NAME}-sp" \
   --json "{\"spec\":{\"identity_type\":\"SERVICE_PRINCIPAL\",\"postgres_role\":\"${APP_SP}\",\"auth_method\":\"LAKEBASE_OAUTH_V1\"}}" \
-  >/dev/null 2>&1 || die "could not create the Postgres role for $APP_SP"
+  2>&1)" || {
+  case "$role_out" in
+    *"already exists"*) echo "  role ${APP_NAME}-sp already exists" ;;
+    *) printf '%s\n' "$role_out" >&2; die "could not create the Postgres role for $APP_SP" ;;
+  esac
+}
 echo "  role ${APP_NAME}-sp -> $APP_SP"
 
 # ---------------------------------------------------------------- privileges
