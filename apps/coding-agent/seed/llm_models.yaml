@@ -46,6 +46,15 @@ providers:
     # The project arrives with the key, so the URL is built per credential rather than stored.
     base_url: ""
 
+  - id: gateway
+    display_name: Generic AI Gateway
+    kind: gateway
+    wire: gateway_openai
+    npm: "@ai-sdk/azure"
+    credential: api_key
+    # The base URL is APP_LLM_GATEWAY_BASE_URL or XAIA_BASE_URL. An empty value does not fall back to a host.
+    base_url: ""
+
 models:
   # ---- the five measured in this workspace (docs/genie-code-replacement-spec.md §3.2) ----
   - id: databricks/databricks-llama-4-maverick
@@ -199,3 +208,61 @@ models:
     # Verified in the repository's working config (docs/genie-code-replacement-spec.md §7.2): with
     # streaming on, tool calls arrive in a shape this agent's mapper does not reassemble.
     tool_streaming: false
+
+  # ---- Generic AI Gateway (Azure API Management). External. No row is the product default.
+  # gpt-5.5 is retired: the door answers 405. Output 8192 is LLMConfig.max_completion_tokens.
+  # The client did not name a context window, so 64000 is the seed default and is documented as such.
+  - id: gateway/gpt-5.6-sol
+    display_name: GPT 5.6 Sol
+    endpoint: gpt-5.6-sol
+    wire: gateway_openai
+    capability: tools_and_reasoning
+    context: 64000
+    output: 8192
+    evidence: documented
+    source: LLMConfig.max_completion_tokens; the client did not name a context window
+    group: Generic AI Gateway
+
+  - id: gateway/gpt-5.6-terra
+    display_name: Terra
+    endpoint: gpt-5.6-terra
+    wire: gateway_openai
+    capability: tools
+    context: 64000
+    output: 8192
+    evidence: documented
+    source: LLMConfig.max_completion_tokens; the client did not name a context window
+    group: Generic AI Gateway
+
+  - id: gateway/gpt-5.6-luna
+    display_name: Luna
+    endpoint: gpt-5.6-luna
+    wire: gateway_openai
+    capability: tools
+    context: 64000
+    output: 8192
+    evidence: documented
+    source: LLMConfig.max_completion_tokens; the client did not name a context window
+    group: Generic AI Gateway
+
+  - id: gateway/claude-sonnet-5
+    display_name: Claude Sonnet 5
+    endpoint: claude-sonnet-5
+    wire: gateway_anthropic
+    capability: tools
+    context: 64000
+    output: 8192
+    evidence: documented
+    source: LLMConfig.max_completion_tokens; the client did not name a context window
+    group: Generic AI Gateway
+
+  - id: gateway/text-embedding-3-large
+    display_name: text-embedding-3-large
+    endpoint: text-embedding-3-large
+    wire: gateway_embed
+    capability: chat_only
+    context: 8192
+    output: 1
+    evidence: documented
+    source: EmbeddingConfig dimensions 3072; this row is not a chat model
+    group: Generic AI Gateway

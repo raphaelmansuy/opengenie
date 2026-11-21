@@ -22,6 +22,7 @@ _ENV_SUFFIX = {
     ProviderKind.ANTHROPIC: "ANTHROPIC",
     ProviderKind.GOOGLE_VERTEX: "VERTEX",
     ProviderKind.DATABRICKS: "DATABRICKS",
+    ProviderKind.GATEWAY: "GATEWAY",
 }
 
 
@@ -42,7 +43,10 @@ class EnvVault:
         return f"LLM_{_ENV_SUFFIX.get(provider, provider.value.upper())}_KEY"
 
     def _raw(self, provider: ProviderKind) -> str:
-        return (self._env.get(self.env_name(provider)) or "").strip()
+        raw = (self._env.get(self.env_name(provider)) or "").strip()
+        if raw or provider is not ProviderKind.GATEWAY:
+            return raw
+        return (self._env.get("XAIA_API_KEY") or "").strip()
 
     def _kind(self, provider: ProviderKind, raw: str) -> CredentialKind:
         return CredentialKind.SERVICE_ACCOUNT_JSON if raw.startswith("{") else CredentialKind.API_KEY
@@ -71,7 +75,8 @@ class EnvVault:
 
     async def list(self, *, user_id: str) -> list[CredentialRef]:
         out: list[CredentialRef] = []
-        for provider in (ProviderKind.OPENAI, ProviderKind.ANTHROPIC, ProviderKind.GOOGLE_VERTEX):
+        for provider in (ProviderKind.OPENAI, ProviderKind.ANTHROPIC, ProviderKind.GOOGLE_VERTEX,
+                         ProviderKind.GATEWAY):
             raw = self._raw(provider)
             if not raw:
                 continue

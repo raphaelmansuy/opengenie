@@ -15,6 +15,7 @@ from .anthropic import AnthropicAdapter
 from .base import BaseAdapter
 from .databricks import DatabricksAdapter
 from .fake import FakeAdapter
+from .gateway import GatewayAdapter
 from .openai import OpenAIAdapter
 from .vertex import VertexAdapter
 
@@ -22,6 +23,7 @@ __all__ = [
     "AnthropicAdapter",
     "BaseAdapter",
     "DatabricksAdapter",
+    "GatewayAdapter",
     "OpenAIAdapter",
     "VertexAdapter",
     "adapter_for",
@@ -34,6 +36,7 @@ _ADAPTERS: tuple[type[BaseAdapter], ...] = (
     OpenAIAdapter,
     AnthropicAdapter,
     VertexAdapter,
+    GatewayAdapter,
 )
 
 

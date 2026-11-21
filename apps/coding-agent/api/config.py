@@ -93,6 +93,11 @@ class Settings(BaseSettings):
     llm_vertex_base_url: str = ""
     llm_openai_base_url: str = ""
     llm_anthropic_base_url: str = ""
+    #: Generic AI Gateway (Azure API Management). Empty means unconfigured: no request is sent.
+    #: `XAIA_BASE_URL` is read when this is empty. The subscription key is `LLM_GATEWAY_KEY`,
+    #: with `XAIA_API_KEY` as the fallback. Neither value is hardcoded.
+    llm_gateway_base_url: str = ""
+    llm_gateway_api_version: str = "2024-08-01-preview"
     #: `dev` / `production`. A production app refuses a development KEK (R-5).
     app_env: str = "dev"
 

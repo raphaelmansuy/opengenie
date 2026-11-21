@@ -67,6 +67,12 @@ Three things to notice, because they decide most of the design:
    an administrator turns it on, an external provider. That switch has a name:
    `APP_LLM_ALLOW_EXTERNAL`.
 
+The Generic AI Gateway is one of those external providers. It is Azure API Management.
+Configuration is in
+[specs/07-ai-gateway/13-configuration.md](../specs/07-ai-gateway/13-configuration.md):
+`APP_LLM_GATEWAY_BASE_URL` (or `XAIA_BASE_URL`) and `LLM_GATEWAY_KEY` (or `XAIA_API_KEY`).
+Serving endpoints keep their own host, `Authorization: Bearer`, and `DATABRICKS_TOKEN`.
+
 ---
 
 ## 2 · Level 2 — Containers (the logical architecture)

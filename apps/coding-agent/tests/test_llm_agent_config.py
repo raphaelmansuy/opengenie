@@ -160,9 +160,10 @@ def test_the_seed_file_parses_into_valid_value_objects():
     from api.adapters.llm.store.seed import load
 
     seed = load()
-    assert len(seed.providers) == 4, "the four provider kinds FR-3 names"
+    assert len(seed.providers) == 5
     assert len(seed.models) >= 10
     assert seed.default_model == "google_vertex/google/gemini-3.8-flash"
+    assert "gateway/gpt-5.5" not in {m.id.value for m in seed.models}
 
 
 def test_the_five_measured_caps_are_the_numbers_this_repository_earned():
@@ -187,7 +188,8 @@ def test_the_seed_grants_nothing_because_authorisation_is_not_a_build_artefact()
     text = (APP / "seed" / "llm_models.yaml").read_text()
     # No key, and no grant row: a `grant:` mapping or a `subject:` field would both be an ACL in a file.
     assert not re.search(r"^\s*(grants?|subject|subject_kind|allow)\s*:", text, re.M)
-    assert all(spec.group == "" for spec in load().models), "a seed row claimed a grant-bearing group"
+    groups = {spec.group for spec in load().models}
+    assert groups <= {"", "Generic AI Gateway"}
 
 
 # -- Vertex native wire: validated against a real `opencode` run (Gemini 3.8 Flash) -----------

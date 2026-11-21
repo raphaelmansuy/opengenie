@@ -57,6 +57,14 @@ env:
     value: mobioos-506015
   - name: APP_LLM_VERTEX_PROJECT
     value: mobioos-506015
+  # Generic AI Gateway. Leave the base empty until an operator sets the environment they want
+  # (UAT, OAT, or production). The app also reads XAIA_BASE_URL when this is empty, and
+  # XAIA_API_KEY when LLM_GATEWAY_KEY is unset. Attach the key as a Databricks secret, for example:
+  #   - name: LLM_GATEWAY_KEY
+  #     valueFrom: gateway-api-key
+  # Do not paste a subscription key into this file. See specs/07-ai-gateway/13-configuration.md.
+  - name: APP_LLM_GATEWAY_BASE_URL
+    value: ""
   # Where a Python session exchanges its commands and results with the app: a Unity Catalog volume it
   # must be able to read and write. `scripts/provision-session-volume.sh` creates it and grants that.
   # `auto` tries a session and falls back, in words, to one-shot runs when one cannot start.

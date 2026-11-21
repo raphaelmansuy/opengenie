@@ -144,4 +144,5 @@ def _provider_label(provider: ProviderKind) -> str:
         ProviderKind.ANTHROPIC: "Anthropic",
         ProviderKind.GOOGLE_VERTEX: "Google Vertex AI",
         ProviderKind.FAKE: "The demo agent",
+        ProviderKind.GATEWAY: "Generic AI Gateway",
     }.get(provider, provider.value)
